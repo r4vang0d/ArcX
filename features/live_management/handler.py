@@ -98,6 +98,18 @@ class LiveManagementHandler:
                 await self._handle_stream_history(callback, state)
             elif callback_data.startswith("lm_stream_"):
                 await self._handle_specific_stream(callback, state)
+            # Auto-join handlers
+            elif callback_data.startswith("aj_"):
+                await self._handle_auto_join_callbacks(callback, state)
+            # Manual-join handlers  
+            elif callback_data.startswith("mj_"):
+                await self._handle_manual_join_callbacks(callback, state)
+            # Voice settings handlers
+            elif callback_data.startswith("vs_"):
+                await self._handle_voice_settings_callbacks(callback, state)
+            # Live scanner handlers
+            elif callback_data.startswith("ls_"):
+                await self._handle_live_scanner_callbacks(callback, state)
             else:
                 await callback.answer("❌ Unknown live management action", show_alert=True)
                 
@@ -606,6 +618,100 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 
         except Exception:
             return "Unknown"
+    
+    # Placeholder implementations for the new handlers
+    async def _handle_auto_join_setup(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Auto-join setup coming soon", show_alert=True)
+    
+    async def _handle_auto_join_manage_channels(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Channel management coming soon", show_alert=True)
+    
+    async def _handle_auto_join_statistics(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Auto-join statistics coming soon", show_alert=True)
+    
+    async def _handle_auto_join_schedule(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Schedule settings coming soon", show_alert=True)
+    
+    async def _handle_auto_join_pause(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("⏸️ Auto-join paused")
+    
+    async def _handle_auto_join_resume(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("▶️ Auto-join resumed")
+    
+    async def _handle_auto_join_advanced(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Advanced settings coming soon", show_alert=True)
+    
+    async def _handle_manual_join_by_link(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Join by link coming soon", show_alert=True)
+    
+    async def _handle_manual_join_select_channel(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Channel selection coming soon", show_alert=True)
+    
+    async def _handle_manual_join_active(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Join active streams coming soon", show_alert=True)
+    
+    async def _handle_manual_view_active(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 View active streams coming soon", show_alert=True)
+    
+    async def _handle_manual_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Manual scan coming soon", show_alert=True)
+    
+    async def _handle_manual_join_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Join settings coming soon", show_alert=True)
+    
+    async def _handle_manual_join_history(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Join history coming soon", show_alert=True)
+    
+    async def _handle_manual_join_alerts(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Stream alerts coming soon", show_alert=True)
+    
+    async def _handle_voice_auto_join_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Auto-join voice settings coming soon", show_alert=True)
+    
+    async def _handle_voice_audio_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Audio settings coming soon", show_alert=True)
+    
+    async def _handle_voice_detection_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Detection settings coming soon", show_alert=True)
+    
+    async def _handle_voice_alerts_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Voice alerts settings coming soon", show_alert=True)
+    
+    async def _handle_voice_privacy_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Privacy settings coming soon", show_alert=True)
+    
+    async def _handle_voice_performance_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Performance settings coming soon", show_alert=True)
+    
+    async def _handle_voice_save_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("💾 Settings saved")
+    
+    async def _handle_voice_reset_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🔄 Settings reset to default")
+    
+    async def _handle_live_quick_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Quick scan coming soon", show_alert=True)
+    
+    async def _handle_live_deep_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Deep scan coming soon", show_alert=True)
+    
+    async def _handle_live_realtime_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Real-time scan coming soon", show_alert=True)
+    
+    async def _handle_live_scan_all(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Scan all channels coming soon", show_alert=True)
+    
+    async def _handle_live_custom_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Custom scan coming soon", show_alert=True)
+    
+    async def _handle_live_scan_results(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Scan results coming soon", show_alert=True)
+    
+    async def _handle_live_scanner_settings(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Scanner settings coming soon", show_alert=True)
+    
+    async def _handle_live_export_scan(self, callback: CallbackQuery, state: FSMContext):
+        await callback.answer("🚧 Export scan coming soon", show_alert=True)
     
     async def shutdown(self):
         """Shutdown live management handler"""

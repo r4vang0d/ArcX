@@ -124,11 +124,20 @@ class TelegramBot:
                 lambda c: True
             )
             
-            # Register feature handlers with dispatcher
+            # Register feature handlers with dispatcher and inline handler
             for handler_name, handler in self.handlers.items():
                 if hasattr(handler, 'register_handlers'):
                     handler.register_handlers(self.dp)
                     logger.info(f"✅ {handler_name} routes registered")
+            
+            # Register callback prefixes with inline handler for proper routing
+            self.inline_handler.register_handler("cm_", self.handlers['channel_management'])
+            self.inline_handler.register_handler("vm_", self.handlers['view_manager']) 
+            self.inline_handler.register_handler("er_", self.handlers['emoji_reactions'])
+            self.inline_handler.register_handler("an_", self.handlers['analytics'])
+            self.inline_handler.register_handler("am_", self.handlers['account_management'])
+            self.inline_handler.register_handler("sh_", self.handlers['system_health'])
+            self.inline_handler.register_handler("lm_", self.handlers['live_management'])
             
             logger.info("✅ All routes registered successfully")
             

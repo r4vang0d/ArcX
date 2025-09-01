@@ -95,6 +95,20 @@ class ChannelManagementHandler:
                 await self._handle_delete_channel(callback, state)
             elif callback_data.startswith("cm_edit_"):
                 await self._handle_edit_channel(callback, state)
+            elif callback_data == "cm_input_ready":
+                await self._handle_input_ready(callback, state)
+            elif callback_data == "cm_add_help":
+                await self._handle_add_help(callback, state)
+            elif callback_data == "cm_view_all_channels":
+                await self._handle_view_all_channels(callback, state)
+            elif callback_data == "cm_global_settings":
+                await self._handle_global_settings(callback, state)
+            elif callback_data.startswith("cm_confirm_delete_"):
+                await self._handle_confirm_delete(callback, state)
+            elif callback_data.startswith("cm_refresh_"):
+                await self._handle_refresh_channel(callback, state)
+            elif callback_data.startswith("cm_settings_"):
+                await self._handle_individual_channel_settings(callback, state)
             else:
                 await callback.answer("❌ Unknown channel management action", show_alert=True)
                 
@@ -432,6 +446,184 @@ Select what you'd like to edit:
                 'channels': []
             }
     
+    async def _handle_input_ready(self, callback: CallbackQuery, state: FSMContext):
+        """Handle input ready callback"""
+        try:
+            await callback.answer("📝 Ready for input")
+            await state.set_state(ChannelManagementStates.waiting_for_channel)
+        except Exception as e:
+            logger.error(f"Error in input ready: {e}")
+            await callback.answer("❌ Failed to prepare input", show_alert=True)
+    
+    async def _handle_add_help(self, callback: CallbackQuery, state: FSMContext):
+        """Handle add channel help"""
+        try:
+            help_text = """
+❓ <b>How to Add Channels</b>
+
+<b>📝 Accepted Formats:</b>
+• Username: @channelname
+• Link: https://t.me/channelname
+• ID: -1001234567890
+
+<b>📋 Requirements:</b>
+• You must be an admin of the channel
+• Channel must be public or provide invite link
+• Bot needs permission to read messages
+
+<b>✅ Tips:</b>
+• Use the exact username without spaces
+• For private channels, add the bot as admin first
+• Check channel privacy settings if errors occur
+            """
+            
+            keyboard = self.keyboards.get_add_channel_keyboard()
+            await callback.message.edit_text(help_text, reply_markup=keyboard)
+            await callback.answer("❓ Help information loaded")
+        except Exception as e:
+            logger.error(f"Error in add help: {e}")
+            await callback.answer("❌ Failed to load help", show_alert=True)
+    
+    async def _handle_view_all_channels(self, callback: CallbackQuery, state: FSMContext):
+        """Handle view all channels"""
+        try:
+            user_id = callback.from_user.id
+            channels = await self.universal_db.get_user_channels_with_stats(user_id)
+            
+            if not channels:
+                await callback.message.edit_text(
+                    "📭 <b>No Channels Found</b>\n\nAdd channels to see them here.",
+                    reply_markup=self.keyboards.get_no_channels_keyboard()
+                )
+                return
+            
+            text = f"📋 <b>All Channels ({len(channels)})</b>\n\n"
+            for i, channel in enumerate(channels, 1):
+                status = "🟢" if channel['is_active'] else "🔴"
+                text += f"{status} {i}. {channel['title'][:40]}\n"
+            
+            keyboard = self.keyboards.get_channels_list_keyboard(channels)
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer(f"📋 All {len(channels)} channels loaded")
+        except Exception as e:
+            logger.error(f"Error viewing all channels: {e}")
+            await callback.answer("❌ Failed to load channels", show_alert=True)
+    
+    async def _handle_global_settings(self, callback: CallbackQuery, state: FSMContext):
+        """Handle global settings"""
+        try:
+            text = """
+⚙️ <b>Global Channel Settings</b>
+
+Configure default settings for all channels:
+
+• 🔄 Auto-refresh interval
+• 📊 Default analytics settings
+• 🚀 Default boost parameters
+• 🎭 Default reaction settings
+• 🔔 Global notifications
+
+These settings apply to new channels by default.
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Auto-refresh Settings", callback_data="cm_global_refresh")],
+                [InlineKeyboardButton(text="📊 Analytics Defaults", callback_data="cm_global_analytics")],
+                [InlineKeyboardButton(text="🚀 Boost Defaults", callback_data="cm_global_boost")],
+                [InlineKeyboardButton(text="🔙 Back to Settings", callback_data="cm_settings")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("⚙️ Global settings loaded")
+        except Exception as e:
+            logger.error(f"Error in global settings: {e}")
+            await callback.answer("❌ Failed to load global settings", show_alert=True)
+    
+    async def _handle_confirm_delete(self, callback: CallbackQuery, state: FSMContext):
+        """Handle confirmed channel deletion"""
+        try:
+            channel_id = int(callback.data.split("_")[-1])
+            user_id = callback.from_user.id
+            
+            # Get channel info
+            channel = await self.db.get_channel_by_id(channel_id)
+            if not channel or channel['user_id'] != user_id:
+                await callback.answer("❌ Channel not found or access denied", show_alert=True)
+                return
+            
+            # Delete the channel
+            await self.db.execute_query(
+                "UPDATE channels SET is_active = FALSE, deleted_at = NOW() WHERE id = $1",
+                channel_id
+            )
+            
+            await callback.message.edit_text(
+                f"✅ <b>Channel Deleted</b>\n\n"
+                f"Channel <b>{channel['title']}</b> has been removed from your list.",
+                reply_markup=self.keyboards.get_back_to_menu_keyboard()
+            )
+            
+            await callback.answer("✅ Channel deleted successfully")
+            
+        except Exception as e:
+            logger.error(f"Error confirming delete: {e}")
+            await callback.answer("❌ Failed to delete channel", show_alert=True)
+    
+    async def _handle_refresh_channel(self, callback: CallbackQuery, state: FSMContext):
+        """Handle refresh channel data"""
+        try:
+            channel_id = int(callback.data.split("_")[-1])
+            
+            # Refresh channel data
+            channel = await self.db.get_channel_by_id(channel_id)
+            if not channel:
+                await callback.answer("❌ Channel not found", show_alert=True)
+                return
+            
+            # Update last_updated timestamp
+            await self.db.execute_query(
+                "UPDATE channels SET updated_at = NOW() WHERE id = $1",
+                channel_id
+            )
+            
+            await callback.answer("🔄 Channel data refreshed")
+            # Reload the channel details
+            await self._handle_channel_action(callback, state)
+            
+        except Exception as e:
+            logger.error(f"Error refreshing channel: {e}")
+            await callback.answer("❌ Failed to refresh channel", show_alert=True)
+    
+    async def _handle_individual_channel_settings(self, callback: CallbackQuery, state: FSMContext):
+        """Handle individual channel settings"""
+        try:
+            channel_id = int(callback.data.split("_")[-1])
+            
+            channel = await self.db.get_channel_by_id(channel_id)
+            if not channel:
+                await callback.answer("❌ Channel not found", show_alert=True)
+                return
+            
+            text = f"""
+⚙️ <b>Settings - {channel['title']}</b>
+
+Configure specific settings for this channel:
+
+• 🚀 Boost settings and defaults
+• 📊 Analytics preferences
+• 🎭 Reaction configuration
+• 🔔 Notification settings
+• ⏰ Schedule preferences
+            """
+            
+            keyboard = self.keyboards.get_channel_settings_keyboard(channel_id)
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("⚙️ Channel settings loaded")
+            
+        except Exception as e:
+            logger.error(f"Error in channel settings: {e}")
+            await callback.answer("❌ Failed to load settings", show_alert=True)
+
     async def shutdown(self):
         """Shutdown channel management handler"""
         try:

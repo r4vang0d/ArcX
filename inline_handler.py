@@ -54,7 +54,15 @@ class InlineHandler:
             
         except Exception as e:
             logger.error(f"Error handling callback {callback.data}: {e}")
-            await callback.answer("❌ An error occurred. Please try again.", show_alert=True)
+            try:
+                # Check if it's a timeout error and handle gracefully
+                if "query is too old" in str(e) or "timeout expired" in str(e):
+                    logger.info("Ignoring expired callback query")
+                    return
+                await callback.answer("❌ An error occurred. Please try again.", show_alert=True)
+            except Exception as answer_error:
+                # If we can't answer the callback (e.g., expired), just log it
+                logger.info(f"Could not answer callback (likely expired): {answer_error}")
     
     def _get_main_menu_callbacks(self) -> set:
         """Get set of main menu callback data"""
@@ -84,6 +92,15 @@ class InlineHandler:
             elif callback_data == "help":
                 # Show help information
                 await self._show_help_menu(callback)
+                
+            elif callback_data == "help_manual":
+                await self._show_user_manual(callback)
+                
+            elif callback_data == "help_faq":
+                await self._show_faq(callback)
+                
+            elif callback_data == "help_troubleshoot":
+                await self._show_troubleshooting(callback)
                 
             elif callback_data == "system_health" and not is_admin:
                 await callback.answer("❌ Admin access required!", show_alert=True)
@@ -292,10 +309,154 @@ Contact administrators for technical assistance.
         await callback.message.edit_text(help_text, reply_markup=keyboard)
         await callback.answer("📚 Help information loaded")
     
+    async def _show_user_manual(self, callback: CallbackQuery):
+        """Show user manual"""
+        manual_text = """
+📖 <b>User Manual</b>
+
+<b>🎯 Getting Started:</b>
+1. Add your Telegram channels using /start → Channel Management
+2. Add Telegram accounts for operations in Account Management
+3. Set up view boosting campaigns
+4. Monitor performance with Analytics
+
+<b>📋 Channel Management:</b>
+• Use @username, t.me/username, or channel ID to add channels
+• You must be an admin of the channel
+• Channels are validated before being added
+
+<b>🚀 View Boosting:</b>
+• Auto Boost - Automatically boost new posts
+• Manual Boost - Boost specific posts
+• Use realistic timing to avoid detection
+
+<b>📱 Account Management:</b>
+• Add multiple Telegram accounts for operations
+• Each account needs phone verification
+• Accounts are rotated to distribute load
+
+<b>💡 Best Practices:</b>
+• Use natural timing patterns
+• Don't boost immediately after posting
+• Monitor account health regularly
+• Check rate limits and adjust accordingly
+        """
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❓ FAQ", callback_data="help_faq")],
+            [InlineKeyboardButton(text="🔧 Troubleshooting", callback_data="help_troubleshoot")],
+            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
+        ])
+        
+        await callback.message.edit_text(manual_text, reply_markup=keyboard)
+        await callback.answer("📖 User manual loaded")
+    
+    async def _show_faq(self, callback: CallbackQuery):
+        """Show frequently asked questions"""
+        faq_text = """
+❓ <b>Frequently Asked Questions</b>
+
+<b>Q: Why can't I add my channel?</b>
+A: Make sure you're an admin of the channel and it's public or you have the invite link.
+
+<b>Q: How many accounts can I add?</b>
+A: You can add up to 100 Telegram accounts per user.
+
+<b>Q: Are the view boosts detectable?</b>
+A: We use natural timing and account rotation to minimize detection risk.
+
+<b>Q: How fast can I boost views?</b>
+A: Recommended: 50-200 views per hour per channel for natural appearance.
+
+<b>Q: What if my account gets rate limited?</b>
+A: The bot automatically respects rate limits and rotates accounts.
+
+<b>Q: Can I schedule boosts for later?</b>
+A: Yes, use the Schedule Boost feature in View Manager.
+
+<b>Q: How do emoji reactions work?</b>
+A: Set up automatic emoji reactions that appear naturally after posts.
+
+<b>Q: Is my data secure?</b>
+A: All session data is encrypted and stored securely.
+
+<b>Q: What's the success rate?</b>
+A: Typical success rates are 90-95% depending on account health.
+        """
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📖 User Manual", callback_data="help_manual")],
+            [InlineKeyboardButton(text="🔧 Troubleshooting", callback_data="help_troubleshoot")],
+            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
+        ])
+        
+        await callback.message.edit_text(faq_text, reply_markup=keyboard)
+        await callback.answer("❓ FAQ loaded")
+    
+    async def _show_troubleshooting(self, callback: CallbackQuery):
+        """Show troubleshooting guide"""
+        troubleshoot_text = """
+🔧 <b>Troubleshooting Guide</b>
+
+<b>🚨 Common Issues & Solutions:</b>
+
+<b>❌ "Failed to add channel"</b>
+• Ensure you're an admin of the channel
+• Check if the channel username is correct
+• Try using the full t.me link instead
+
+<b>❌ "Account authentication failed"</b>
+• Check your phone number format (+1234567890)
+• Ensure you have access to receive SMS/calls
+• Try adding the account again
+
+<b>❌ "View boost not working"</b>
+• Check if accounts are active and healthy
+• Verify rate limits aren't exceeded
+• Ensure the message/post exists
+
+<b>❌ "Rate limit exceeded"</b>
+• Wait for the limit to reset (usually 24 hours)
+• Use fewer concurrent operations
+• Add more accounts to distribute load
+
+<b>❌ "Unknown error occurred"</b>
+• Check your internet connection
+• Restart the bot using /start
+• Contact support if issue persists
+
+<b>💡 Performance Tips:</b>
+• Keep accounts healthy with regular breaks
+• Use realistic boost amounts (50-500 views)
+• Monitor success rates in Analytics
+• Spread operations across multiple accounts
+
+<b>🔧 Support:</b>
+If problems persist, contact the administrators with:
+• Error message details
+• What you were trying to do
+• Screenshot if possible
+        """
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📖 User Manual", callback_data="help_manual")],
+            [InlineKeyboardButton(text="❓ FAQ", callback_data="help_faq")],
+            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
+        ])
+        
+        await callback.message.edit_text(troubleshoot_text, reply_markup=keyboard)
+        await callback.answer("🔧 Troubleshooting guide loaded")
+
     async def _handle_unknown_callback(self, callback: CallbackQuery):
         """Handle unknown or unregistered callbacks"""
         logger.warning(f"Unknown callback received: {callback.data}")
-        await callback.answer("❌ Unknown command. Please use the menu buttons.", show_alert=True)
+        try:
+            await callback.answer("❌ Unknown command. Please use the menu buttons.", show_alert=True)
+        except Exception as e:
+            if "query is too old" in str(e) or "timeout expired" in str(e):
+                logger.info("Ignoring expired unknown callback query")
+            else:
+                logger.error(f"Error answering unknown callback: {e}")
     
     def _get_welcome_message(self, is_admin: bool, username: str) -> str:
         """Generate welcome message based on user type"""
