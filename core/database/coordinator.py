@@ -222,11 +222,7 @@ class DatabaseCoordinator:
                     metric_name VARCHAR(100) NOT NULL,
                     metric_value NUMERIC NOT NULL,
                     metadata JSONB DEFAULT '{}',
-                    timestamp TIMESTAMP DEFAULT NOW(),
-                    
-                    INDEX idx_analytics_entity (entity_type, entity_id),
-                    INDEX idx_analytics_metric (metric_name),
-                    INDEX idx_analytics_timestamp (timestamp)
+                    timestamp TIMESTAMP DEFAULT NOW()
                 )
                 """,
                 
@@ -238,12 +234,28 @@ class DatabaseCoordinator:
                     module VARCHAR(100) NOT NULL,
                     message TEXT NOT NULL,
                     metadata JSONB DEFAULT '{}',
-                    timestamp TIMESTAMP DEFAULT NOW(),
-                    
-                    INDEX idx_logs_level (log_level),
-                    INDEX idx_logs_module (module),
-                    INDEX idx_logs_timestamp (timestamp)
+                    timestamp TIMESTAMP DEFAULT NOW()
                 )
+                """,
+                
+                # Create indexes separately (PostgreSQL syntax)
+                """
+                CREATE INDEX IF NOT EXISTS idx_analytics_entity ON analytics_data (entity_type, entity_id)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_analytics_metric ON analytics_data (metric_name)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics_data (timestamp)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_logs_level ON system_logs (log_level)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_logs_module ON system_logs (module)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON system_logs (timestamp)
                 """
             ]
             

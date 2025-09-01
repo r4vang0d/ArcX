@@ -24,13 +24,13 @@ class Config:
         
     def _load_environment_files(self):
         """Load environment files in priority order"""
-        # Load .env file first (bot configuration)
-        env_file = Path(".env")
+        # Load env file first (bot configuration)
+        env_file = Path("env")
         if env_file.exists():
             load_dotenv(env_file)
-            logger.info("✅ Loaded .env configuration")
+            logger.info("✅ Loaded env configuration")
         else:
-            logger.warning("⚠️ .env file not found")
+            logger.warning("⚠️ env file not found")
         
         # Load data.env file (external database - MANDATORY)
         data_env_file = Path("data.env")
