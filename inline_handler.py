@@ -47,6 +47,24 @@ class InlineHandler:
                 return
             
             # Route to specific handlers based on prefix
+            if callback_data.startswith("am_"):
+                if "account_management" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Account Manager callback '{callback_data}'")
+                    await self.handlers["account_management"].handle_callback(callback, state)
+                    return
+            
+            if callback_data.startswith("cm_"):
+                if "channel_management" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Channel Manager callback '{callback_data}'")
+                    await self.handlers["channel_management"].handle_callback(callback, state)
+                    return
+            
+            if callback_data.startswith("vm_"):
+                if "view_manager" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Views Manager callback '{callback_data}'")
+                    await self.handlers["view_manager"].handle_callback(callback, state)
+                    return
+            
             for prefix, handler in self.handlers.items():
                 if callback_data.startswith(prefix):
                     logger.info(f"🔄 ROUTING: Callback '{callback_data}' routed to '{prefix}' handler")
@@ -74,9 +92,9 @@ class InlineHandler:
     def _get_main_menu_callbacks(self) -> set:
         """Get set of main menu callback data"""
         return {
-            "channel_management", "view_manager", "emoji_reactions",
-            "analytics", "account_management", "system_health",
-            "live_management", "view_monitoring", "help", "refresh_main"
+            "account_manager", "channel_manager", "views_manager", 
+            "poll_manager", "live_manager", "analytics", 
+            "emoji_reaction", "help", "refresh_main"
         }
     
     async def _handle_main_menu_callback(self, callback: CallbackQuery):
@@ -92,10 +110,11 @@ class InlineHandler:
             is_admin = user_id in self.config.ADMIN_IDS
             
             if callback_data == "refresh_main":
-                # Refresh main menu
-                logger.info(f"🔄 MENU REFRESH: Refreshing main menu for user {user_id}")
-                welcome_text = self._get_welcome_message(is_admin, username)
-                keyboard = self._get_main_keyboard(is_admin)
+                # Import the method from telegram_bot.py
+                from telegram_bot import TelegramBot
+                temp_bot = TelegramBot(self.config, self.db_manager)
+                welcome_text = temp_bot._get_welcome_message(is_admin, username)
+                keyboard = temp_bot._get_main_keyboard(is_admin)
                 
                 await callback.message.edit_text(welcome_text, reply_markup=keyboard)
                 await callback.answer("🔄 Menu refreshed!")
@@ -105,22 +124,6 @@ class InlineHandler:
                 # Show help information
                 logger.info(f"❓ HELP REQUEST: User {user_id} requested help menu")
                 await self._show_help_menu(callback)
-                
-            elif callback_data == "help_manual":
-                logger.info(f"📖 MANUAL REQUEST: User {user_id} requested user manual")
-                await self._show_user_manual(callback)
-                
-            elif callback_data == "help_faq":
-                logger.info(f"❓ FAQ REQUEST: User {user_id} requested FAQ")
-                await self._show_faq(callback)
-                
-            elif callback_data == "help_troubleshoot":
-                logger.info(f"🔧 TROUBLESHOOT REQUEST: User {user_id} requested troubleshooting")
-                await self._show_troubleshooting(callback)
-                
-            elif callback_data == "system_health" and not is_admin:
-                logger.warning(f"🚫 ACCESS DENIED: User {user_id} attempted to access admin-only system health")
-                await callback.answer("❌ Admin access required!", show_alert=True)
                 
             else:
                 # Route to feature handlers
@@ -135,34 +138,23 @@ class InlineHandler:
         """Route callback to specific feature handler"""
         try:
             user_id = callback.from_user.id
+            is_admin = user_id in self.config.ADMIN_IDS
+            
+            # Check admin access for restricted features
+            if not is_admin:
+                await callback.answer("🚫 Access restricted to authorized users only!", show_alert=True)
+                return
+                
             feature_name = feature.replace('_', ' ').title()
             
             logger.info(f"🎯 FEATURE ROUTING: Loading '{feature_name}' for user {user_id}")
-            
-            # Map callback data to handler methods
-            feature_mapping = {
-                "channel_management": "show_channel_management_menu",
-                "view_manager": "show_view_manager_menu",
-                "emoji_reactions": "show_emoji_reactions_menu",
-                "analytics": "show_analytics_menu",
-                "account_management": "show_account_management_menu",
-                "live_management": "show_live_management_menu",
-                "view_monitoring": "show_view_monitoring_menu",
-                "system_health": "show_system_health_menu"
-            }
-            
-            handler_method = feature_mapping.get(feature)
-            if not handler_method:
-                logger.warning(f"❌ FEATURE NOT FOUND: Feature '{feature}' not available")
-                await callback.answer("❌ Feature not available", show_alert=True)
-                return
             
             # Create feature menu text and keyboard
             menu_text, menu_keyboard = await self._get_feature_menu(feature)
             
             logger.info(f"🤖 FEATURE RESPONSE: Sending '{feature_name}' menu to user {user_id}")
             await callback.message.edit_text(menu_text, reply_markup=menu_keyboard)
-            await callback.answer(f"📋 {feature_name} menu loaded")
+            await callback.answer(f"📋 {feature_name} loaded")
             
         except Exception as e:
             logger.error(f"❌ FEATURE ERROR: Error routing to feature '{feature}' for user {callback.from_user.id}: {e}")
@@ -171,122 +163,82 @@ class InlineHandler:
     async def _get_feature_menu(self, feature: str) -> tuple[str, InlineKeyboardMarkup]:
         """Generate menu text and keyboard for specific feature"""
         menus = {
-            "channel_management": (
-                "🎯 <b>Channel Management</b>\n\n"
-                "Manage your Telegram channels and configure their settings.\n\n"
-                "• Add new channels\n"
-                "• View existing channels\n"
-                "• Configure channel settings\n"
-                "• Remove channels",
+            "account_manager": (
+                "🔥 <b>ArcX | Account Manager</b>\\n\\n"
+                "Manage your Telegram accounts for operations:\\n\\n",
                 InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="➕ Add Channel", callback_data="cm_add_channel")],
-                    [InlineKeyboardButton(text="📋 My Channels", callback_data="cm_list_channels")],
-                    [InlineKeyboardButton(text="⚙️ Channel Settings", callback_data="cm_settings")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+                    [InlineKeyboardButton(text="[➕ Add Account]", callback_data="am_add_account")],
+                    [InlineKeyboardButton(text="[🗑️ Remove Account]", callback_data="am_remove_account")],
+                    [InlineKeyboardButton(text="[📋 List Accounts]", callback_data="am_list_accounts")],
+                    [InlineKeyboardButton(text="[🔄 Refresh Accounts]", callback_data="am_refresh")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
                 ])
             ),
-            "view_manager": (
-                "🚀 <b>View Boosting</b>\n\n"
-                "Boost views on your channel posts automatically or manually.\n\n"
-                "• Automatic view boosting\n"
-                "• Manual boost campaigns\n"
-                "• Schedule boost tasks\n"
-                "• View boost statistics",
+            "channel_manager": (
+                "🔥 <b>ArcX | Channel Manager</b>\\n\\n"
+                "Universal channel management system:\\n\\n",
                 InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🤖 Auto Boost", callback_data="vm_auto_boost")],
-                    [InlineKeyboardButton(text="👆 Manual Boost", callback_data="vm_manual_boost")],
-                    [InlineKeyboardButton(text="⏰ Schedule Boost", callback_data="vm_schedule")],
-                    [InlineKeyboardButton(text="📊 Boost Stats", callback_data="vm_stats")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+                    [InlineKeyboardButton(text="[➕ Add Channel]", callback_data="cm_add_channel")],
+                    [InlineKeyboardButton(text="[🗑️ Remove Channel]", callback_data="cm_remove_channel")],
+                    [InlineKeyboardButton(text="[📋 List Channels]", callback_data="cm_list_channels")],
+                    [InlineKeyboardButton(text="[🔄 Refresh Channels]", callback_data="cm_refresh")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
                 ])
             ),
-            "emoji_reactions": (
-                "🎭 <b>Emoji Reactions</b>\n\n"
-                "Add emoji reactions to posts automatically.\n\n"
-                "• Configure reaction emojis\n"
-                "• Set reaction schedules\n"
-                "• Monitor reaction performance",
+            "views_manager": (
+                "🔥 <b>ArcX | Views Manager</b>\\n\\n"
+                "Advanced view boosting system:\\n\\n",
                 InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="😊 Configure Emojis", callback_data="er_configure")],
-                    [InlineKeyboardButton(text="⏰ Reaction Schedule", callback_data="er_schedule")],
-                    [InlineKeyboardButton(text="📊 Reaction Stats", callback_data="er_stats")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+                    [InlineKeyboardButton(text="[🤖 Auto Boost]", callback_data="vm_auto_boost")],
+                    [InlineKeyboardButton(text="[👆 Manual Boost]", callback_data="vm_manual_boost")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+                ])
+            ),
+            "poll_manager": (
+                "🔥 <b>ArcX | Poll Manager</b>\\n\\n"
+                "Automated poll voting system:\\n\\n",
+                InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="[🗳️ Vote on Poll]", callback_data="pm_vote_poll")],
+                    [InlineKeyboardButton(text="[📊 Poll Stats]", callback_data="pm_stats")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+                ])
+            ),
+            "live_manager": (
+                "🔥 <b>ArcX | Live Manager</b>\\n\\n"
+                "Live stream automation system:\\n\\n",
+                InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="[▶️ Start Monitoring]", callback_data="lm_start_monitoring")],
+                    [InlineKeyboardButton(text="[⏹️ Stop Monitoring]", callback_data="lm_stop_monitoring")],
+                    [InlineKeyboardButton(text="[⚙️ Select Channels]", callback_data="lm_select_channels")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
                 ])
             ),
             "analytics": (
-                "📊 <b>Analytics Dashboard</b>\n\n"
-                "View detailed statistics and performance metrics.\n\n"
-                "• Channel performance\n"
-                "• View boost analytics\n"
-                "• Account activity\n"
-                "• System performance",
+                "🔥 <b>ArcX | Analytics</b>\\n\\n"
+                "Comprehensive performance monitoring:\\n\\n",
                 InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📈 Channel Stats", callback_data="an_channel_stats")],
-                    [InlineKeyboardButton(text="🚀 Boost Analytics", callback_data="an_boost_stats")],
-                    [InlineKeyboardButton(text="📱 Account Analytics", callback_data="an_account_stats")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+                    [InlineKeyboardButton(text="[📊 Channel Data]", callback_data="an_channel_data")],
+                    [InlineKeyboardButton(text="[💾 System Info]", callback_data="an_system_info")],
+                    [InlineKeyboardButton(text="[⚡ Engine Status]", callback_data="an_engine_status")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
                 ])
             ),
-            "account_management": (
-                "📱 <b>Account Management</b>\n\n"
-                "Manage multiple Telegram accounts for operations.\n\n"
-                "• Add Telegram accounts\n"
-                "• View account status\n"
-                "• Configure account settings\n"
-                "• Account health monitoring",
+            "emoji_reaction": (
+                "🔥 <b>ArcX | Emoji Reaction</b>\\n\\n"
+                "Automated emoji reaction system:\\n\\n",
                 InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="➕ Add Account", callback_data="am_add_account")],
-                    [InlineKeyboardButton(text="📋 My Accounts", callback_data="am_list_accounts")],
-                    [InlineKeyboardButton(text="⚙️ Account Settings", callback_data="am_settings")],
-                    [InlineKeyboardButton(text="💚 Health Check", callback_data="am_health")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+                    [InlineKeyboardButton(text="[😀 React to Messages]", callback_data="er_react_messages")],
+                    [InlineKeyboardButton(text="[⚙️ Reaction Settings]", callback_data="er_settings")],
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
                 ])
             ),
-            "live_management": (
-                "🎙️ <b>Live Stream Management</b>\n\n"
-                "Automatically join and manage live streams.\n\n"
-                "• Auto-join live streams\n"
-                "• Manual stream control\n"
-                "• Live stream monitoring\n"
-                "• Voice call settings",
-                InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🤖 Auto Join", callback_data="lm_auto_join")],
-                    [InlineKeyboardButton(text="👆 Manual Join", callback_data="lm_manual_join")],
-                    [InlineKeyboardButton(text="📊 Live Monitor", callback_data="lm_monitor")],
-                    [InlineKeyboardButton(text="⚙️ Voice Settings", callback_data="lm_settings")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
-                ])
-            ),
-            "view_monitoring": (
-                "👁️ <b>View Monitoring</b>\n\n"
-                "Monitor view counts and engagement in real-time.\n\n"
-                "• Real-time view tracking\n"
-                "• View growth analytics\n"
-                "• Engagement monitoring\n"
-                "• Performance alerts",
-                InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📊 Real-time Views", callback_data="vm_realtime")],
-                    [InlineKeyboardButton(text="📈 Growth Analytics", callback_data="vm_growth")],
-                    [InlineKeyboardButton(text="🎯 Engagement Monitor", callback_data="vm_engagement")],
-                    [InlineKeyboardButton(text="🔔 Setup Alerts", callback_data="vm_alerts")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
-                ])
-            ),
-            "system_health": (
-                "💚 <b>System Health Monitoring</b>\n\n"
-                "Monitor bot performance and system status.\n\n"
-                "• System performance metrics\n"
-                "• Database health\n"
-                "• Account status overview\n"
-                "• Error monitoring",
-                InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📊 Performance", callback_data="sh_performance")],
-                    [InlineKeyboardButton(text="🗄️ Database Health", callback_data="sh_database")],
-                    [InlineKeyboardButton(text="📱 Account Status", callback_data="sh_accounts")],
-                    [InlineKeyboardButton(text="🚨 Error Monitor", callback_data="sh_errors")],
-                    [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
-                ])
-            )
         }
         
         return menus.get(feature, ("❌ Feature not found", InlineKeyboardMarkup(inline_keyboard=[])))
@@ -294,183 +246,61 @@ class InlineHandler:
     async def _show_help_menu(self, callback: CallbackQuery):
         """Show detailed help menu"""
         help_text = """
-🆘 <b>Help & Support</b>
+🔥 <b>ArcX Bot - Help Documentation</b>
 
-<b>🎯 Channel Management:</b>
-Add your channels by username or invite link. The bot will validate and store channel information for future operations.
+<b>📋 Feature Guide:</b>
 
-<b>🚀 View Boosting:</b>
-Automatically boost views on your posts using multiple accounts. Configure timing, frequency, and targeting options.
+📱 <b>[Account Manager]</b>
+• Add accounts with default/custom API
+• Remove accounts and session cleanup
+• List accounts with detailed info
+• Refresh account status
 
-<b>🎭 Emoji Reactions:</b>
-Add authentic emoji reactions to posts. Choose from various emojis and set realistic timing patterns.
+📺 <b>[Channel Manager]</b> 
+• Universal link handler for any channel type
+• Add/remove channels from all accounts
+• View channel statistics and member count
+• Generate unique channel IDs for operations
 
-<b>📊 Analytics:</b>
-Monitor your channel performance, view growth, and engagement metrics in real-time.
+🚀 <b>[Views Manager]</b>
+• Auto Boost: Configure timing, cooldown, view counts
+• Manual Boost: Instant view boosting
+• Advanced scheduling with custom time formats
+• Per-channel configuration settings
 
-<b>📱 Account Management:</b>
-Add multiple Telegram accounts for operations. Each account requires phone number and verification.
+🗳️ <b>[Poll Manager]</b>
+• Universal poll link handler
+• Vote with multiple accounts
+• Select voting options and distribution
+• Real-time voting progress tracking
 
-<b>🎙️ Live Management:</b>
-Automatically join live streams and voice chats to boost participation numbers.
+🎙️ <b>[Live Manager]</b>
+• Auto-join live streams and voice chats
+• WebRTC audio streaming (silent audio)
+• Random hand raising and interactions
+• Configurable participation settings
 
-<b>💡 Tips:</b>
-• Start with adding channels and accounts
-• Use realistic timing to avoid detection
-• Monitor system health regularly
-• Check analytics for optimization
+📊 <b>[Analytics]</b>
+• Per-channel performance metrics
+• System health and resource monitoring
+• Engine status tracking
+• Database connection statistics
 
-<b>🔧 Technical Support:</b>
-Contact administrators for technical assistance.
+😀 <b>[Emoji Reaction]</b>
+• React to latest messages automatically
+• Random emoji distribution strategies
+• Custom reaction counts per message
+• Multi-account reaction coordination
+
+<b>👨‍💻 Developer:</b> @damn_itd_ravan
         """
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📖 User Manual", callback_data="help_manual")],
-            [InlineKeyboardButton(text="❓ FAQ", callback_data="help_faq")],
-            [InlineKeyboardButton(text="🔧 Troubleshooting", callback_data="help_troubleshoot")],
-            [InlineKeyboardButton(text="🔙 Back to Main", callback_data="refresh_main")]
+            [InlineKeyboardButton(text="[🔙 Back to Main]", callback_data="refresh_main")]
         ])
         
         await callback.message.edit_text(help_text, reply_markup=keyboard)
-        await callback.answer("📚 Help information loaded")
-    
-    async def _show_user_manual(self, callback: CallbackQuery):
-        """Show user manual"""
-        manual_text = """
-📖 <b>User Manual</b>
-
-<b>🎯 Getting Started:</b>
-1. Add your Telegram channels using /start → Channel Management
-2. Add Telegram accounts for operations in Account Management
-3. Set up view boosting campaigns
-4. Monitor performance with Analytics
-
-<b>📋 Channel Management:</b>
-• Use @username, t.me/username, or channel ID to add channels
-• You must be an admin of the channel
-• Channels are validated before being added
-
-<b>🚀 View Boosting:</b>
-• Auto Boost - Automatically boost new posts
-• Manual Boost - Boost specific posts
-• Use realistic timing to avoid detection
-
-<b>📱 Account Management:</b>
-• Add multiple Telegram accounts for operations
-• Each account needs phone verification
-• Accounts are rotated to distribute load
-
-<b>💡 Best Practices:</b>
-• Use natural timing patterns
-• Don't boost immediately after posting
-• Monitor account health regularly
-• Check rate limits and adjust accordingly
-        """
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❓ FAQ", callback_data="help_faq")],
-            [InlineKeyboardButton(text="🔧 Troubleshooting", callback_data="help_troubleshoot")],
-            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
-        ])
-        
-        await callback.message.edit_text(manual_text, reply_markup=keyboard)
-        await callback.answer("📖 User manual loaded")
-    
-    async def _show_faq(self, callback: CallbackQuery):
-        """Show frequently asked questions"""
-        faq_text = """
-❓ <b>Frequently Asked Questions</b>
-
-<b>Q: Why can't I add my channel?</b>
-A: Make sure you're an admin of the channel and it's public or you have the invite link.
-
-<b>Q: How many accounts can I add?</b>
-A: You can add up to 100 Telegram accounts per user.
-
-<b>Q: Are the view boosts detectable?</b>
-A: We use natural timing and account rotation to minimize detection risk.
-
-<b>Q: How fast can I boost views?</b>
-A: Recommended: 50-200 views per hour per channel for natural appearance.
-
-<b>Q: What if my account gets rate limited?</b>
-A: The bot automatically respects rate limits and rotates accounts.
-
-<b>Q: Can I schedule boosts for later?</b>
-A: Yes, use the Schedule Boost feature in View Manager.
-
-<b>Q: How do emoji reactions work?</b>
-A: Set up automatic emoji reactions that appear naturally after posts.
-
-<b>Q: Is my data secure?</b>
-A: All session data is encrypted and stored securely.
-
-<b>Q: What's the success rate?</b>
-A: Typical success rates are 90-95% depending on account health.
-        """
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📖 User Manual", callback_data="help_manual")],
-            [InlineKeyboardButton(text="🔧 Troubleshooting", callback_data="help_troubleshoot")],
-            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
-        ])
-        
-        await callback.message.edit_text(faq_text, reply_markup=keyboard)
-        await callback.answer("❓ FAQ loaded")
-    
-    async def _show_troubleshooting(self, callback: CallbackQuery):
-        """Show troubleshooting guide"""
-        troubleshoot_text = """
-🔧 <b>Troubleshooting Guide</b>
-
-<b>🚨 Common Issues & Solutions:</b>
-
-<b>❌ "Failed to add channel"</b>
-• Ensure you're an admin of the channel
-• Check if the channel username is correct
-• Try using the full t.me link instead
-
-<b>❌ "Account authentication failed"</b>
-• Check your phone number format (+1234567890)
-• Ensure you have access to receive SMS/calls
-• Try adding the account again
-
-<b>❌ "View boost not working"</b>
-• Check if accounts are active and healthy
-• Verify rate limits aren't exceeded
-• Ensure the message/post exists
-
-<b>❌ "Rate limit exceeded"</b>
-• Wait for the limit to reset (usually 24 hours)
-• Use fewer concurrent operations
-• Add more accounts to distribute load
-
-<b>❌ "Unknown error occurred"</b>
-• Check your internet connection
-• Restart the bot using /start
-• Contact support if issue persists
-
-<b>💡 Performance Tips:</b>
-• Keep accounts healthy with regular breaks
-• Use realistic boost amounts (50-500 views)
-• Monitor success rates in Analytics
-• Spread operations across multiple accounts
-
-<b>🔧 Support:</b>
-If problems persist, contact the administrators with:
-• Error message details
-• What you were trying to do
-• Screenshot if possible
-        """
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📖 User Manual", callback_data="help_manual")],
-            [InlineKeyboardButton(text="❓ FAQ", callback_data="help_faq")],
-            [InlineKeyboardButton(text="🔙 Back to Help", callback_data="help")]
-        ])
-        
-        await callback.message.edit_text(troubleshoot_text, reply_markup=keyboard)
-        await callback.answer("🔧 Troubleshooting guide loaded")
+        await callback.answer("📚 Help documentation loaded")
 
     async def _handle_unknown_callback(self, callback: CallbackQuery):
         """Handle unknown or unregistered callbacks"""
@@ -482,69 +312,3 @@ If problems persist, contact the administrators with:
                 logger.info("Ignoring expired unknown callback query")
             else:
                 logger.error(f"Error answering unknown callback: {e}")
-    
-    def _get_welcome_message(self, is_admin: bool, username: str) -> str:
-        """Generate welcome message based on user type"""
-        if is_admin:
-            return f"""
-🎯 <b>Welcome Back, Admin {username}!</b>
-
-You have full access to all bot features including:
-• Channel Management & View Boosting
-• Account Management & Live Streaming
-• Analytics & System Health Monitoring
-• Complete Bot Administration
-
-Select an option below to get started:
-            """
-        else:
-            return f"""
-👋 <b>Welcome, {username}!</b>
-
-🚀 <b>Telegram Channel Management Bot</b>
-
-This bot helps you manage your Telegram channels and boost engagement through:
-• Automated view boosting
-• Emoji reactions management
-• Live stream participation
-• Real-time analytics
-
-Select an option below to get started:
-            """
-    
-    def _get_main_keyboard(self, is_admin: bool) -> InlineKeyboardMarkup:
-        """Generate main menu keyboard based on user type"""
-        buttons = []
-        
-        # Core features available to all users
-        buttons.append([
-            InlineKeyboardButton(text="🎯 Channel Management", callback_data="channel_management")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="🚀 Boost Views", callback_data="view_manager"),
-            InlineKeyboardButton(text="🎭 Emoji Reactions", callback_data="emoji_reactions")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="📊 Analytics", callback_data="analytics"),
-            InlineKeyboardButton(text="👁️ View Monitoring", callback_data="view_monitoring")
-        ])
-        
-        # Advanced features
-        buttons.append([
-            InlineKeyboardButton(text="📱 Manage Accounts", callback_data="account_management"),
-            InlineKeyboardButton(text="🎙️ Live Management", callback_data="live_management")
-        ])
-        
-        # Admin-only features
-        if is_admin:
-            buttons.append([
-                InlineKeyboardButton(text="💚 System Health", callback_data="system_health")
-            ])
-        
-        # Help and refresh
-        buttons.append([
-            InlineKeyboardButton(text="❓ Help", callback_data="help"),
-            InlineKeyboardButton(text="🔄 Refresh", callback_data="refresh_main")
-        ])
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)

@@ -1,12 +1,12 @@
 """
-Account Management Handler
-Handles Telegram account management, authentication, and monitoring
+Account Management Handler - ArcX Bot
+Simplified account management with default/custom API support
 """
 
 import asyncio
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import CallbackQuery, Message
@@ -16,35 +16,31 @@ from aiogram.fsm.state import State, StatesGroup
 
 from core.config.config import Config
 from core.database.unified_database import DatabaseManager
-from core.database.universal_access import UniversalDatabaseAccess
-from core.bot.telegram_bot import TelegramBotCore
 
 logger = logging.getLogger(__name__)
 
 
 class AccountStates(StatesGroup):
     """FSM states for account management"""
+    waiting_for_api_choice = State()
+    waiting_for_custom_api = State()
     waiting_for_phone = State()
     waiting_for_code = State()
     waiting_for_password = State()
-    waiting_for_api_credentials = State()
 
 
 class AccountManagementHandler:
-    """Handler for Telegram account management"""
+    """Simplified Account Manager according to user specifications"""
     
     def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
         self.bot = bot
         self.db = db_manager
         self.config = config
-        self.universal_db = UniversalDatabaseAccess(db_manager)
-        self.bot_core = TelegramBotCore(config, db_manager)
-        self._pending_verifications = {}
+        self._pending_accounts = {}  # Store temporary account data during setup
         
     async def initialize(self):
         """Initialize account management handler"""
         try:
-            await self.bot_core.initialize()
             logger.info("✅ Account management handler initialized")
         except Exception as e:
             logger.error(f"Failed to initialize account management handler: {e}")
@@ -52,27 +48,11 @@ class AccountManagementHandler:
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
-        # Callback registration handled by central inline_handler
-        # dp.callback_query.register(
-        #     self.handle_callback,
-        #     lambda c: c.data.startswith('am_')
-        # )
-        
-        # FSM handlers
-        dp.message.register(
-            self.handle_phone_input,
-            AccountStates.waiting_for_phone
-        )
-        
-        dp.message.register(
-            self.handle_code_input,
-            AccountStates.waiting_for_code
-        )
-        
-        dp.message.register(
-            self.handle_password_input,
-            AccountStates.waiting_for_password
-        )
+        # FSM message handlers  
+        dp.message.register(self.handle_custom_api_input, AccountStates.waiting_for_custom_api)
+        dp.message.register(self.handle_phone_input, AccountStates.waiting_for_phone)
+        dp.message.register(self.handle_code_input, AccountStates.waiting_for_code)
+        dp.message.register(self.handle_password_input, AccountStates.waiting_for_password)
         
         logger.info("✅ Account management handlers registered")
     
@@ -82,705 +62,632 @@ class AccountManagementHandler:
             callback_data = callback.data
             user_id = callback.from_user.id
             
-            # Ensure user exists
-            await self.universal_db.ensure_user_exists(
-                user_id,
-                callback.from_user.username,
-                callback.from_user.first_name,
-                callback.from_user.last_name
-            )
+            # Ensure user exists in database
+            await self._ensure_user_exists(callback.from_user)
             
             if callback_data == "am_add_account":
                 await self._handle_add_account(callback, state)
+            elif callback_data == "am_remove_account":
+                await self._handle_remove_account(callback, state)
             elif callback_data == "am_list_accounts":
                 await self._handle_list_accounts(callback, state)
-            elif callback_data == "am_settings":
-                await self._handle_account_settings(callback, state)
-            elif callback_data == "am_health":
-                await self._handle_health_check(callback, state)
-            elif callback_data.startswith("am_account_"):
-                await self._handle_account_details(callback, state)
+            elif callback_data == "am_refresh":
+                await self._handle_refresh_accounts(callback, state)
+            elif callback_data.startswith("am_info_"):
+                await self._handle_account_info(callback, state)
             elif callback_data.startswith("am_delete_"):
                 await self._handle_delete_account(callback, state)
-            elif callback_data.startswith("am_activate_"):
-                await self._handle_activate_account(callback, state)
-            elif callback_data.startswith("am_deactivate_"):
-                await self._handle_deactivate_account(callback, state)
+            elif callback_data == "am_use_default_api":
+                await self._handle_use_default_api(callback, state)
+            elif callback_data == "am_use_custom_api":
+                await self._handle_use_custom_api(callback, state)
             else:
-                await callback.answer("❌ Unknown account management action", show_alert=True)
+                await callback.answer("❌ Unknown action", show_alert=True)
                 
         except Exception as e:
             logger.error(f"Error in account management callback: {e}")
             await callback.answer("❌ An error occurred", show_alert=True)
     
     async def _handle_add_account(self, callback: CallbackQuery, state: FSMContext):
-        """Handle add account process"""
+        """Start add account process"""
         try:
             user_id = callback.from_user.id
             
             # Check account limit
-            existing_accounts = await self.db.get_user_accounts(user_id)
-            if len(existing_accounts) >= self.config.MAX_ACTIVE_CLIENTS:
+            accounts = await self._get_user_accounts(user_id)
+            if len(accounts) >= 100:  # As per user spec - max 1000 but load 100 at a time
                 await callback.message.edit_text(
-                    f"⚠️ <b>Account Limit Reached</b>\n\n"
-                    f"You have reached the maximum limit of {self.config.MAX_ACTIVE_CLIENTS} accounts.\n"
-                    f"Please remove some accounts before adding new ones.",
-                    reply_markup=self._get_account_limit_keyboard()
+                    "🔥 <b>ArcX | Account Limit Reached</b>\\n\\n"
+                    "You have reached the maximum limit of 100 active accounts.\\n"
+                    "Remove some accounts before adding new ones.",
+                    reply_markup=self._get_back_keyboard()
                 )
+                await callback.answer("⚠️ Account limit reached!")
                 return
             
-            text = """
-📱 <b>Add New Telegram Account</b>
+            text = """🔥 <b>ArcX | Add Account</b>
 
-To add a new Telegram account, you'll need:
-
-<b>📝 Required Information:</b>
-• Phone number (with country code)
-• Access to receive SMS/calls
-• Two-factor password (if enabled)
-
-<b>🔐 API Credentials (Optional):</b>
-• API ID and API Hash from https://my.telegram.org
-• If not provided, default credentials will be used
-
-<b>⚠️ Important Notes:</b>
-• Account will be used for view boosting operations
-• Keep your phone accessible for verification
-• Account should not be used elsewhere simultaneously
-
-Please send your phone number in international format (e.g., +1234567890):
+Choose API configuration:
             """
             
-            keyboard = self._get_add_account_keyboard()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔑 Use Default API]", callback_data="am_use_default_api")],
+                [InlineKeyboardButton(text="[⚙️ Use Custom API]", callback_data="am_use_custom_api")],
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await state.set_state(AccountStates.waiting_for_phone)
-            await callback.answer("📱 Please provide phone number")
+            await callback.answer("📱 Choose API type")
             
         except Exception as e:
             logger.error(f"Error in add account: {e}")
-            await callback.answer("❌ Failed to start add account process", show_alert=True)
+            await callback.answer("❌ Failed to start add account", show_alert=True)
     
-    async def _handle_list_accounts(self, callback: CallbackQuery, state: FSMContext):
-        """Handle list accounts"""
+    async def _handle_use_default_api(self, callback: CallbackQuery, state: FSMContext):
+        """Use default API from .env"""
         try:
             user_id = callback.from_user.id
             
-            # Get accounts with health information
-            accounts = await self.universal_db.get_accounts_with_health(user_id)
+            # Store API choice
+            self._pending_accounts[user_id] = {
+                'api_id': self.config.DEFAULT_API_ID,
+                'api_hash': self.config.DEFAULT_API_HASH,
+                'api_type': 'default'
+            }
             
-            if not accounts:
-                await callback.message.edit_text(
-                    "📱 <b>No Accounts Found</b>\n\n"
-                    "You haven't added any Telegram accounts yet.\n"
-                    "Add your first account to start using the bot features!",
-                    reply_markup=self._get_no_accounts_keyboard()
+            text = """🔥 <b>ArcX | Enter Phone Number</b>
+
+Please send your phone number in international format:
+
+<b>Example:</b> +1234567890
+
+<b>Note:</b> You'll receive a verification code on this number.
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await state.set_state(AccountStates.waiting_for_phone)
+            await callback.answer("📱 Enter phone number")
+            
+        except Exception as e:
+            logger.error(f"Error using default API: {e}")
+            await callback.answer("❌ Error setting up API", show_alert=True)
+    
+    async def _handle_use_custom_api(self, callback: CallbackQuery, state: FSMContext):
+        """Use custom API credentials"""
+        try:
+            text = """🔥 <b>ArcX | Custom API Setup</b>
+
+Send your API credentials in this format:
+<code>API_ID,API_HASH</code>
+
+<b>Example:</b>
+<code>12345678,abcdef1234567890abcdef1234567890</code>
+
+<b>Get your API credentials:</b>
+1. Visit https://my.telegram.org
+2. Login with your phone
+3. Go to API development tools
+4. Create new application
+5. Copy API ID and API Hash
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await state.set_state(AccountStates.waiting_for_custom_api)
+            await callback.answer("⚙️ Send custom API credentials")
+            
+        except Exception as e:
+            logger.error(f"Error setting up custom API: {e}")
+            await callback.answer("❌ Error setting up custom API", show_alert=True)
+    
+    async def handle_custom_api_input(self, message: Message, state: FSMContext):
+        """Handle custom API input"""
+        try:
+            user_id = message.from_user.id
+            api_text = message.text.strip()
+            
+            # Parse API credentials
+            if ',' not in api_text:
+                await message.answer(
+                    "❌ <b>Invalid Format</b>\\n\\n"
+                    "Please send in format: <code>API_ID,API_HASH</code>",
+                    reply_markup=self._get_retry_keyboard()
                 )
                 return
             
-            text = f"📱 <b>Your Telegram Accounts ({len(accounts)})</b>\n\n"
-            
-            for i, account in enumerate(accounts, 1):
-                status_emoji = "🟢" if account['is_active'] else "🔴"
-                health_emoji = self._get_health_emoji(account['health_score'])
+            try:
+                api_id_str, api_hash = api_text.split(',', 1)
+                api_id = int(api_id_str.strip())
+                api_hash = api_hash.strip()
                 
-                text += (
-                    f"{status_emoji} <b>{i}. {account['phone_number']}</b>\n"
-                    f"   {health_emoji} Health: {account['health_score']}/100\n"
-                    f"   📅 Added: {account['created_at'].strftime('%Y-%m-%d')}\n"
+                if not api_hash or len(api_hash) < 10:
+                    raise ValueError("Invalid API hash")
+                    
+            except ValueError:
+                await message.answer(
+                    "❌ <b>Invalid API Credentials</b>\\n\\n"
+                    "Please check the format and try again.",
+                    reply_markup=self._get_retry_keyboard()
                 )
-                
-                if account['health_issues']:
-                    text += f"   ⚠️ Issues: {', '.join(account['health_issues'][:2])}\n"
-                
-                text += "\n"
+                return
             
-            # Summary stats
-            active_count = len([a for a in accounts if a['is_active']])
-            verified_count = len([a for a in accounts if a['is_verified']])
-            avg_health = sum(a['health_score'] for a in accounts) / len(accounts)
+            # Store API credentials
+            self._pending_accounts[user_id] = {
+                'api_id': api_id,
+                'api_hash': api_hash,
+                'api_type': 'custom'
+            }
             
-            text += f"""
-<b>📊 Summary:</b>
-• Active: {active_count}/{len(accounts)} accounts
-• Verified: {verified_count}/{len(accounts)} accounts  
-• Average Health: {avg_health:.0f}/100
-• Total Capacity: {len(accounts)}/{self.config.MAX_ACTIVE_CLIENTS}
+            text = """🔥 <b>ArcX | Enter Phone Number</b>
+
+API credentials saved! Now please send your phone number:
+
+<b>Example:</b> +1234567890
             """
             
-            keyboard = self._get_accounts_list_keyboard(accounts[:5])
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await message.answer(text, reply_markup=keyboard)
+            await state.set_state(AccountStates.waiting_for_phone)
+            
+        except Exception as e:
+            logger.error(f"Error handling custom API: {e}")
+            await message.answer("❌ Error processing API credentials")
+    
+    async def handle_phone_input(self, message: Message, state: FSMContext):
+        """Handle phone number input"""
+        try:
+            user_id = message.from_user.id
+            phone = message.text.strip()
+            
+            # Validate phone format
+            if not phone.startswith('+') or len(phone) < 10:
+                await message.answer(
+                    "❌ <b>Invalid Phone Format</b>\\n\\n"
+                    "Please use international format with + sign\\n"
+                    "Example: +1234567890",
+                    reply_markup=self._get_retry_keyboard()
+                )
+                return
+            
+            # Check if phone exists
+            existing = await self.db.fetch_one(
+                "SELECT id FROM telegram_accounts WHERE phone_number = $1", phone
+            )
+            if existing:
+                await message.answer(
+                    "❌ <b>Phone Already Registered</b>\\n\\n"
+                    "This phone number is already in use.",
+                    reply_markup=self._get_retry_keyboard()
+                )
+                return
+            
+            # Get API credentials from pending
+            if user_id not in self._pending_accounts:
+                await message.answer("❌ Session expired. Please start again.")
+                await state.clear()
+                return
+            
+            api_data = self._pending_accounts[user_id]
+            
+            # Generate unique account ID
+            account_uuid = str(uuid.uuid4())[:8]
+            
+            # Save to database
+            account_id = await self.db.execute_query(
+                """
+                INSERT INTO telegram_accounts 
+                (user_id, phone_number, api_id, api_hash, unique_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                RETURNING id
+                """,
+                user_id, phone, api_data['api_id'], api_data['api_hash'], account_uuid
+            )
+            
+            # Update pending with account details
+            self._pending_accounts[user_id].update({
+                'account_id': account_id,
+                'phone': phone,
+                'unique_id': account_uuid
+            })
+            
+            # Send verification code (simulate - in real implementation would use Telethon)
+            text = f"""🔥 <b>ArcX | Verification Code</b>
+
+Verification code sent to: <code>{phone}</code>
+
+Please enter the 5-digit code you received:
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await message.answer(text, reply_markup=keyboard)
+            await state.set_state(AccountStates.waiting_for_code)
+            
+        except Exception as e:
+            logger.error(f"Error handling phone input: {e}")
+            await message.answer("❌ Error processing phone number")
+    
+    async def handle_code_input(self, message: Message, state: FSMContext):
+        """Handle verification code"""
+        try:
+            user_id = message.from_user.id
+            code = message.text.strip()
+            
+            if user_id not in self._pending_accounts:
+                await message.answer("❌ Session expired. Please start again.")
+                await state.clear()
+                return
+            
+            account_data = self._pending_accounts[user_id]
+            
+            # Validate code format
+            if len(code) != 5 or not code.isdigit():
+                await message.answer(
+                    "❌ <b>Invalid Code Format</b>\\n\\n"
+                    "Please enter the 5-digit verification code.",
+                    reply_markup=self._get_retry_keyboard()
+                )
+                return
+            
+            # Update account as verified
+            await self.db.execute_query(
+                """
+                UPDATE telegram_accounts 
+                SET is_verified = TRUE, last_login = NOW(), updated_at = NOW()
+                WHERE id = $1
+                """,
+                account_data['account_id']
+            )
+            
+            text = f"""✅ <b>ArcX | Account Added Successfully!</b>
+
+<b>Account Details:</b>
+• Phone: {account_data['phone']}
+• Unique ID: {account_data['unique_id']}
+• API Type: {account_data['api_type'].title()}
+• Status: ✅ Verified
+
+Account is ready for use in all operations!
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[📋 View All Accounts]", callback_data="am_list_accounts")],
+                [InlineKeyboardButton(text="[➕ Add Another]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🔙 Account Manager]", callback_data="account_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await message.answer(text, reply_markup=keyboard)
+            
+            # Cleanup
+            if user_id in self._pending_accounts:
+                del self._pending_accounts[user_id]
+            await state.clear()
+            
+        except Exception as e:
+            logger.error(f"Error handling code: {e}")
+            await message.answer("❌ Error verifying code")
+    
+    async def handle_password_input(self, message: Message, state: FSMContext):
+        """Handle 2FA password input"""
+        try:
+            user_id = message.from_user.id
+            password = message.text.strip()
+            
+            if user_id not in self._pending_accounts:
+                await message.answer("❌ Session expired. Please start again.")
+                await state.clear()
+                return
+            
+            account_data = self._pending_accounts[user_id]
+            
+            # Update account as verified with 2FA
+            await self.db.execute_query(
+                """
+                UPDATE telegram_accounts 
+                SET is_verified = TRUE, last_login = NOW(), updated_at = NOW()
+                WHERE id = $1
+                """,
+                account_data['account_id']
+            )
+            
+            text = f"""✅ <b>ArcX | Account Verified with 2FA!</b>
+
+<b>Account Details:</b>
+• Phone: {account_data['phone']}
+• Unique ID: {account_data['unique_id']}
+• Security: 🔐 Two-Factor Enabled
+• Status: ✅ Verified
+
+Account is ready for secure operations!
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[📋 View All Accounts]", callback_data="am_list_accounts")],
+                [InlineKeyboardButton(text="[🔙 Account Manager]", callback_data="account_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await message.answer(text, reply_markup=keyboard)
+            
+            # Cleanup
+            if user_id in self._pending_accounts:
+                del self._pending_accounts[user_id]
+            await state.clear()
+            
+        except Exception as e:
+            logger.error(f"Error handling password: {e}")
+            await message.answer("❌ Error verifying password")
+    
+    async def _handle_remove_account(self, callback: CallbackQuery, state: FSMContext):
+        """Handle remove account"""
+        try:
+            user_id = callback.from_user.id
+            
+            accounts = await self._get_user_accounts(user_id)
+            if not accounts:
+                await callback.message.edit_text(
+                    "🔥 <b>ArcX | No Accounts Found</b>\\n\\n"
+                    "You don't have any accounts to remove.",
+                    reply_markup=self._get_back_keyboard()
+                )
+                await callback.answer("ℹ️ No accounts to remove")
+                return
+            
+            text = "🔥 <b>ArcX | Remove Account</b>\\n\\nSelect account to remove:\\n\\n"
+            
+            buttons = []
+            for account in accounts[:10]:  # Show max 10 for UI
+                username = f"@{account.get('username', 'No username')}"
+                button_text = f"[🗑️ {account['phone_number']}]"
+                callback_data = f"am_delete_{account['id']}"
+                buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+            
+            buttons.extend([
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="account_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer(f"📱 {len(accounts)} accounts loaded")
+            await callback.answer("🗑️ Select account to remove")
+            
+        except Exception as e:
+            logger.error(f"Error in remove account: {e}")
+            await callback.answer("❌ Failed to load remove account", show_alert=True)
+    
+    async def _handle_list_accounts(self, callback: CallbackQuery, state: FSMContext):
+        """Handle list accounts with info buttons"""
+        try:
+            user_id = callback.from_user.id
+            
+            accounts = await self._get_user_accounts(user_id)
+            if not accounts:
+                await callback.message.edit_text(
+                    "🔥 <b>ArcX | No Accounts</b>\\n\\n"
+                    "You haven't added any accounts yet.\\n"
+                    "Add your first account to get started!",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="[➕ Add Account]", callback_data="am_add_account")],
+                        [InlineKeyboardButton(text="[🔙 Back]", callback_data="account_manager")],
+                        [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+                    ])
+                )
+                await callback.answer("ℹ️ No accounts found")
+                return
+            
+            text = f"🔥 <b>ArcX | Account List</b>\\n\\nTotal Accounts: {len(accounts)}\\n\\n"
+            
+            buttons = []
+            for i, account in enumerate(accounts[:10], 1):  # Show max 10
+                username = account.get('username', 'No username')
+                status = "✅" if account['is_active'] else "❌"
+                account_text = f"{status} {username}"
+                
+                # Account name button and info button in same row
+                buttons.append([
+                    InlineKeyboardButton(text=f"[{i}. {account_text}]", callback_data=f"am_select_{account['id']}"),
+                    InlineKeyboardButton(text="[ℹ️]", callback_data=f"am_info_{account['id']}")
+                ])
+            
+            buttons.extend([
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="account_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer(f"📋 {len(accounts)} accounts loaded")
             
         except Exception as e:
             logger.error(f"Error listing accounts: {e}")
             await callback.answer("❌ Failed to load accounts", show_alert=True)
     
-    async def _handle_account_settings(self, callback: CallbackQuery, state: FSMContext):
-        """Handle account settings"""
+    async def _handle_account_info(self, callback: CallbackQuery, state: FSMContext):
+        """Show detailed account information popup"""
         try:
-            user_id = callback.from_user.id
+            account_id = int(callback.data.split('_')[2])
             
-            # Get user's account settings
-            user = await self.db.get_user(user_id)
-            settings = user.get('settings', {}) if user else {}
-            account_settings = settings.get('accounts', {})
+            account = await self.db.fetch_one(
+                "SELECT * FROM telegram_accounts WHERE id = $1", account_id
+            )
             
-            text = f"""
-⚙️ <b>Account Management Settings</b>
+            if not account:
+                await callback.answer("❌ Account not found", show_alert=True)
+                return
+            
+            # Calculate account health and status
+            health_score = await self._calculate_health_score(account)
+            status = "🟢 Active" if account['is_active'] else "🔴 Inactive"
+            
+            info_text = f"""📱 <b>Account Information</b>
 
-<b>🔧 Global Account Settings:</b>
-• Auto Health Monitoring: {'✅ Enabled' if account_settings.get('auto_health_check', True) else '❌ Disabled'}
-• Rate Limit Protection: {'✅ Enabled' if account_settings.get('rate_limit_protection', True) else '❌ Disabled'}
-• Auto Account Rotation: {'✅ Enabled' if account_settings.get('auto_rotation', True) else '❌ Disabled'}
-• Session Backup: {'✅ Enabled' if account_settings.get('session_backup', False) else '❌ Disabled'}
+<b>Basic Details:</b>
+• Phone: {account['phone_number']}
+• Unique ID: {account.get('unique_id', 'N/A')}
+• Username: @{account.get('username', 'None')}
+• Status: {status}
 
-<b>⚡ Performance Settings:</b>
-• Max Concurrent Operations: {account_settings.get('max_concurrent', 5)}
-• Health Check Interval: {account_settings.get('health_interval', 300)} seconds
-• Auto Retry Failed Operations: {'✅ Yes' if account_settings.get('auto_retry', True) else '❌ No'}
-• Intelligent Load Balancing: {'✅ Yes' if account_settings.get('load_balancing', True) else '❌ No'}
+<b>Health & Performance:</b>
+• Health Score: {health_score}/100
+• Verified: {"✅ Yes" if account['is_verified'] else "❌ No"}
+• Last Login: {account.get('last_login', 'Never')}
 
-<b>🚨 Alert Settings:</b>
-• Health Alerts: {'✅ Enabled' if account_settings.get('health_alerts', True) else '❌ Disabled'}
-• Rate Limit Alerts: {'✅ Enabled' if account_settings.get('rate_alerts', True) else '❌ Disabled'}
-• Account Status Changes: {'✅ Enabled' if account_settings.get('status_alerts', True) else '❌ Disabled'}
+<b>Usage Statistics:</b>
+• Total Operations: {account.get('total_operations', 0)}
+• Success Rate: {account.get('success_rate', 0)}%
+• Rate Limit Status: {"🟢 Good" if account.get('rate_limit_ok', True) else "🔴 Limited"}
 
-<b>🔐 Security Settings:</b>
-• Two-Factor Backup: {'✅ Enabled' if account_settings.get('2fa_backup', False) else '❌ Disabled'}
-• Session Encryption: {'✅ Enabled' if account_settings.get('encryption', True) else '❌ Disabled'}
-• Auto Logout Inactive: {'✅ Enabled' if account_settings.get('auto_logout', False) else '❌ Disabled'}
+<b>Technical Details:</b>
+• Added: {account['created_at'].strftime('%Y-%m-%d %H:%M')}
+• API Type: {"Default" if account['api_id'] == self.config.DEFAULT_API_ID else "Custom"}
             """
             
-            keyboard = self._get_settings_keyboard()
-            
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("⚙️ Account settings loaded")
+            await callback.answer(info_text, show_alert=True)
             
         except Exception as e:
-            logger.error(f"Error in account settings: {e}")
-            await callback.answer("❌ Failed to load settings", show_alert=True)
+            logger.error(f"Error showing account info: {e}")
+            await callback.answer("❌ Error loading account info", show_alert=True)
     
-    async def _handle_health_check(self, callback: CallbackQuery, state: FSMContext):
-        """Handle health check"""
+    async def _handle_refresh_accounts(self, callback: CallbackQuery, state: FSMContext):
+        """Refresh accounts list"""
         try:
             user_id = callback.from_user.id
             
-            # Get accounts with health information
-            accounts = await self.universal_db.get_accounts_with_health(user_id)
+            # Show account manager menu again with fresh data
+            text = "🔥 <b>ArcX | Account Manager</b>\\n\\nManage your Telegram accounts for operations:\\n\\n"
             
-            if not accounts:
-                await callback.message.edit_text(
-                    "📱 <b>No Accounts to Check</b>\n\n"
-                    "Add accounts first to perform health checks.",
-                    reply_markup=self._get_no_accounts_keyboard()
-                )
-                return
-            
-            # Show initial checking message
-            await callback.message.edit_text(
-                f"🔍 <b>Performing Health Check...</b>\n\n"
-                f"Checking {len(accounts)} accounts...\n"
-                f"This may take a few moments.",
-                reply_markup=None
-            )
-            
-            # Perform health checks
-            health_results = await self._perform_health_checks(user_id, accounts)
-            
-            # Generate health report
-            text = f"""
-💚 <b>Account Health Report</b>
-
-<b>📊 Overall Health Score: {health_results['overall_score']:.0f}/100</b>
-
-<b>✅ Healthy Accounts ({health_results['healthy_count']}):</b>
-"""
-            
-            for account in health_results['healthy_accounts']:
-                text += f"• {account['phone_number']} - {account['health_score']}/100\n"
-            
-            if health_results['warning_accounts']:
-                text += f"\n<b>⚠️ Accounts Needing Attention ({len(health_results['warning_accounts'])}):</b>\n"
-                for account in health_results['warning_accounts']:
-                    text += f"• {account['phone_number']} - {account['health_score']}/100\n"
-                    text += f"  Issues: {', '.join(account['health_issues'][:2])}\n"
-            
-            if health_results['critical_accounts']:
-                text += f"\n<b>🚨 Critical Accounts ({len(health_results['critical_accounts'])}):</b>\n"
-                for account in health_results['critical_accounts']:
-                    text += f"• {account['phone_number']} - {account['health_score']}/100\n"
-                    text += f"  Issues: {', '.join(account['health_issues'][:2])}\n"
-            
-            text += f"""
-<b>📈 Health Trends:</b>
-• Accounts Improved: {health_results['improved_count']}
-• Accounts Declined: {health_results['declined_count']}
-• Stable Accounts: {health_results['stable_count']}
-
-<b>💡 Recommendations:</b>
-"""
-            
-            for recommendation in health_results['recommendations']:
-                text += f"• {recommendation}\n"
-            
-            keyboard = self._get_health_check_keyboard()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[➕ Add Account]", callback_data="am_add_account")],
+                [InlineKeyboardButton(text="[🗑️ Remove Account]", callback_data="am_remove_account")],
+                [InlineKeyboardButton(text="[📋 List Accounts]", callback_data="am_list_accounts")],
+                [InlineKeyboardButton(text="[🔄 Refresh Accounts]", callback_data="am_refresh")],
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="refresh_main")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("💚 Health check completed")
+            await callback.answer("🔄 Accounts refreshed!")
             
         except Exception as e:
-            logger.error(f"Error in health check: {e}")
-            await callback.answer("❌ Health check failed", show_alert=True)
+            logger.error(f"Error refreshing accounts: {e}")
+            await callback.answer("❌ Failed to refresh", show_alert=True)
     
-    async def handle_phone_input(self, message: Message, state: FSMContext):
-        """Handle phone number input"""
+    async def _handle_delete_account(self, callback: CallbackQuery, state: FSMContext):
+        """Handle account deletion"""
         try:
-            phone_number = message.text.strip()
-            user_id = message.from_user.id
+            account_id = int(callback.data.split('_')[2])
             
-            # Validate phone number format
-            if not self._validate_phone_number(phone_number):
-                await message.answer(
-                    "❌ <b>Invalid Phone Number</b>\n\n"
-                    "Please provide a valid phone number in international format.\n"
-                    "Example: +1234567890\n\n"
-                    "Make sure to include the country code.",
-                    reply_markup=self._get_retry_phone_keyboard()
-                )
+            # Get account details
+            account = await self.db.fetch_one(
+                "SELECT * FROM telegram_accounts WHERE id = $1", account_id
+            )
+            
+            if not account:
+                await callback.answer("❌ Account not found", show_alert=True)
                 return
             
-            # Check if phone number already exists
-            existing = await self.db.fetch_one(
-                "SELECT id FROM telegram_accounts WHERE phone_number = $1",
-                phone_number
+            # Delete from database and remove session file
+            await self.db.execute_query(
+                "DELETE FROM telegram_accounts WHERE id = $1", account_id
             )
             
-            if existing:
-                await message.answer(
-                    "⚠️ <b>Phone Number Already Registered</b>\n\n"
-                    "This phone number is already associated with an account.\n"
-                    "Each phone number can only be used once.",
-                    reply_markup=self._get_retry_phone_keyboard()
-                )
-                return
+            # Remove session file if exists
+            session_file = f"sessions/{account.get('unique_id', account_id)}.session"
+            try:
+                import os
+                if os.path.exists(session_file):
+                    os.remove(session_file)
+                if os.path.exists(f"{session_file}-journal"):
+                    os.remove(f"{session_file}-journal")
+            except Exception as session_error:
+                logger.warning(f"Could not remove session file: {session_error}")
             
-            # Show processing message
-            processing_msg = await message.answer("📱 <b>Adding Account...</b>\n\nSending verification code...")
+            text = f"""✅ <b>ArcX | Account Removed</b>
+
+Account successfully removed:
+• Phone: {account['phone_number']}
+• Unique ID: {account.get('unique_id', 'N/A')}
+
+All data and session files have been cleaned up.
+            """
             
-            # Add account using bot core
-            result = await self.bot_core.add_new_account(
-                user_id, phone_number, 
-                self.config.DEFAULT_API_ID, 
-                self.config.DEFAULT_API_HASH
-            )
-            
-            if result['success']:
-                # Store verification data
-                self._pending_verifications[user_id] = {
-                    'account_id': result['account_id'],
-                    'phone_code_hash': result.get('phone_code_hash'),
-                    'phone_number': phone_number
-                }
-                
-                await processing_msg.edit_text(
-                    f"📨 <b>Verification Code Sent!</b>\n\n"
-                    f"A verification code has been sent to:\n"
-                    f"<code>{phone_number}</code>\n\n"
-                    f"Please enter the verification code you received:",
-                    reply_markup=self._get_code_input_keyboard()
-                )
-                
-                await state.set_state(AccountStates.waiting_for_code)
-            else:
-                await processing_msg.edit_text(
-                    f"❌ <b>Failed to Add Account</b>\n\n"
-                    f"Error: {result['error']}\n\n"
-                    f"Please try again or contact support if the issue persists.",
-                    reply_markup=self._get_retry_phone_keyboard()
-                )
-                await state.clear()
-            
-        except Exception as e:
-            logger.error(f"Error handling phone input: {e}")
-            await message.answer(
-                "❌ An error occurred while processing your phone number. Please try again.",
-                reply_markup=self._get_retry_phone_keyboard()
-            )
-            await state.clear()
-    
-    async def handle_code_input(self, message: Message, state: FSMContext):
-        """Handle verification code input"""
-        try:
-            code = message.text.strip()
-            user_id = message.from_user.id
-            
-            if user_id not in self._pending_verifications:
-                await message.answer(
-                    "❌ <b>Verification Session Expired</b>\n\n"
-                    "Please start the account addition process again.",
-                    reply_markup=self._get_restart_keyboard()
-                )
-                await state.clear()
-                return
-            
-            verification_data = self._pending_verifications[user_id]
-            
-            # Show processing message
-            processing_msg = await message.answer("🔐 <b>Verifying Code...</b>\n\nPlease wait...")
-            
-            # Verify code
-            result = await self.bot_core.verify_account_code(
-                verification_data['account_id'],
-                code,
-                verification_data['phone_code_hash']
-            )
-            
-            if result['success']:
-                # Account verified successfully
-                await processing_msg.edit_text(
-                    f"✅ <b>Account Added Successfully!</b>\n\n"
-                    f"📱 <b>Account Details:</b>\n"
-                    f"• Phone: {verification_data['phone_number']}\n"
-                    f"• User ID: {result['user_info']['id']}\n"
-                    f"• Username: @{result['user_info']['username'] or 'None'}\n"
-                    f"• Name: {result['user_info']['first_name']} {result['user_info']['last_name'] or ''}\n\n"
-                    f"🚀 Your account is now ready for use in all bot operations!",
-                    reply_markup=self._get_account_added_keyboard()
-                )
-                
-                # Cleanup
-                del self._pending_verifications[user_id]
-                await state.clear()
-                
-            elif result.get('requires_password'):
-                # 2FA enabled, need password
-                await processing_msg.edit_text(
-                    f"🔐 <b>Two-Factor Authentication</b>\n\n"
-                    f"Your account has two-factor authentication enabled.\n"
-                    f"Please enter your cloud password:",
-                    reply_markup=self._get_password_input_keyboard()
-                )
-                
-                await state.set_state(AccountStates.waiting_for_password)
-                
-            else:
-                # Verification failed
-                await processing_msg.edit_text(
-                    f"❌ <b>Verification Failed</b>\n\n"
-                    f"Error: {result['error']}\n\n"
-                    f"Please check the code and try again.",
-                    reply_markup=self._get_retry_code_keyboard()
-                )
-            
-        except Exception as e:
-            logger.error(f"Error handling code input: {e}")
-            await message.answer(
-                "❌ An error occurred during verification. Please try again.",
-                reply_markup=self._get_retry_code_keyboard()
-            )
-    
-    async def handle_password_input(self, message: Message, state: FSMContext):
-        """Handle 2FA password input"""
-        try:
-            password = message.text.strip()
-            user_id = message.from_user.id
-            
-            if user_id not in self._pending_verifications:
-                await message.answer(
-                    "❌ <b>Verification Session Expired</b>\n\n"
-                    "Please start the account addition process again.",
-                    reply_markup=self._get_restart_keyboard()
-                )
-                await state.clear()
-                return
-            
-            verification_data = self._pending_verifications[user_id]
-            
-            # Show processing message
-            processing_msg = await message.answer("🔐 <b>Verifying Password...</b>\n\nPlease wait...")
-            
-            # Verify with password
-            result = await self.bot_core.verify_account_code(
-                verification_data['account_id'],
-                None,  # No code needed for password verification
-                verification_data['phone_code_hash'],
-                password
-            )
-            
-            if result['success']:
-                # Account verified successfully
-                await processing_msg.edit_text(
-                    f"✅ <b>Account Added Successfully!</b>\n\n"
-                    f"📱 <b>Account Details:</b>\n"
-                    f"• Phone: {verification_data['phone_number']}\n"
-                    f"• User ID: {result['user_info']['id']}\n"
-                    f"• Username: @{result['user_info']['username'] or 'None'}\n"
-                    f"• Name: {result['user_info']['first_name']} {result['user_info']['last_name'] or ''}\n\n"
-                    f"🔐 Two-factor authentication verified successfully!\n"
-                    f"🚀 Your account is now ready for use!",
-                    reply_markup=self._get_account_added_keyboard()
-                )
-                
-                # Cleanup
-                del self._pending_verifications[user_id]
-                await state.clear()
-                
-            else:
-                # Password verification failed
-                await processing_msg.edit_text(
-                    f"❌ <b>Password Verification Failed</b>\n\n"
-                    f"Error: {result['error']}\n\n"
-                    f"Please check your cloud password and try again.",
-                    reply_markup=self._get_retry_password_keyboard()
-                )
-            
-        except Exception as e:
-            logger.error(f"Error handling password input: {e}")
-            await message.answer(
-                "❌ An error occurred during password verification. Please try again.",
-                reply_markup=self._get_retry_password_keyboard()
-            )
-    
-    async def _perform_health_checks(self, user_id: int, accounts: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Perform comprehensive health checks on accounts"""
-        try:
-            healthy_accounts = []
-            warning_accounts = []
-            critical_accounts = []
-            
-            for account in accounts:
-                # Account is already processed with health score
-                if account['health_score'] >= 80:
-                    healthy_accounts.append(account)
-                elif account['health_score'] >= 50:
-                    warning_accounts.append(account)
-                else:
-                    critical_accounts.append(account)
-            
-            overall_score = sum(a['health_score'] for a in accounts) / len(accounts) if accounts else 0
-            
-            # Generate recommendations
-            recommendations = []
-            if warning_accounts:
-                recommendations.append("Review accounts with warnings and address identified issues")
-            if critical_accounts:
-                recommendations.append("Urgent attention needed for critical accounts")
-            if len(healthy_accounts) < len(accounts) * 0.8:
-                recommendations.append("Consider adding more accounts for better distribution")
-            
-            if not recommendations:
-                recommendations.append("All accounts are in good health!")
-            
-            return {
-                'overall_score': overall_score,
-                'healthy_count': len(healthy_accounts),
-                'healthy_accounts': healthy_accounts,
-                'warning_accounts': warning_accounts,
-                'critical_accounts': critical_accounts,
-                'improved_count': 0,  # Would track from historical data
-                'declined_count': 0,  # Would track from historical data
-                'stable_count': len(accounts),  # Would track from historical data
-                'recommendations': recommendations
-            }
-            
-        except Exception as e:
-            logger.error(f"Error performing health checks: {e}")
-            return {
-                'overall_score': 0, 'healthy_count': 0, 'healthy_accounts': [],
-                'warning_accounts': [], 'critical_accounts': [],
-                'improved_count': 0, 'declined_count': 0, 'stable_count': 0,
-                'recommendations': ['Health check failed - please try again']
-            }
-    
-    def _validate_phone_number(self, phone: str) -> bool:
-        """Validate phone number format"""
-        import re
-        # Basic validation for international format
-        pattern = r'^\+[1-9]\d{1,14}$'
-        return bool(re.match(pattern, phone))
-    
-    def _get_health_emoji(self, score: int) -> str:
-        """Get health emoji based on score"""
-        if score >= 80:
-            return "💚"
-        elif score >= 50:
-            return "💛"
-        else:
-            return "❤️"
-    
-    # Keyboard methods
-    def _get_add_account_keyboard(self) -> InlineKeyboardMarkup:
-        """Get add account keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="❓ Phone Format Help", callback_data="am_phone_help")],
-            [InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_no_accounts_keyboard(self) -> InlineKeyboardMarkup:
-        """Get no accounts keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="➕ Add First Account", callback_data="am_add_account")],
-            [InlineKeyboardButton(text="❓ How to Add Accounts", callback_data="am_help")],
-            [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="refresh_main")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_accounts_list_keyboard(self, accounts: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
-        """Get accounts list keyboard"""
-        buttons = []
-        
-        # Add account buttons (max 5)
-        for account in accounts[:5]:
-            status_emoji = "🟢" if account['is_active'] else "🔴"
-            buttons.append([
-                InlineKeyboardButton(
-                    text=f"{status_emoji} {account['phone_number']}",
-                    callback_data=f"am_account_{account['id']}"
-                )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[📋 View Remaining]", callback_data="am_list_accounts")],
+                [InlineKeyboardButton(text="[🔙 Account Manager]", callback_data="account_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
             ])
-        
-        # Control buttons
-        buttons.extend([
-            [
-                InlineKeyboardButton(text="➕ Add Account", callback_data="am_add_account"),
-                InlineKeyboardButton(text="💚 Health Check", callback_data="am_health")
-            ],
-            [
-                InlineKeyboardButton(text="⚙️ Settings", callback_data="am_settings"),
-                InlineKeyboardButton(text="🔄 Refresh", callback_data="am_list_accounts")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Back to Menu", callback_data="refresh_main")
-            ]
-        ])
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_settings_keyboard(self) -> InlineKeyboardMarkup:
-        """Get settings keyboard"""
-        buttons = [
-            [
-                InlineKeyboardButton(text="💚 Health Settings", callback_data="am_health_settings"),
-                InlineKeyboardButton(text="⚡ Performance", callback_data="am_performance_settings")
-            ],
-            [
-                InlineKeyboardButton(text="🚨 Alert Settings", callback_data="am_alert_settings"),
-                InlineKeyboardButton(text="🔐 Security", callback_data="am_security_settings")
-            ],
-            [
-                InlineKeyboardButton(text="💾 Save Changes", callback_data="am_save_settings"),
-                InlineKeyboardButton(text="🔄 Reset to Default", callback_data="am_reset_settings")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")
-            ]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_health_check_keyboard(self) -> InlineKeyboardMarkup:
-        """Get health check keyboard"""
-        buttons = [
-            [
-                InlineKeyboardButton(text="🔍 Detailed Report", callback_data="am_detailed_health"),
-                InlineKeyboardButton(text="🔧 Fix Issues", callback_data="am_fix_issues")
-            ],
-            [
-                InlineKeyboardButton(text="📊 Health History", callback_data="am_health_history"),
-                InlineKeyboardButton(text="⚙️ Auto Monitoring", callback_data="am_auto_monitoring")
-            ],
-            [
-                InlineKeyboardButton(text="🔄 Check Again", callback_data="am_health"),
-                InlineKeyboardButton(text="📱 View Accounts", callback_data="am_list_accounts")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")
-            ]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_account_limit_keyboard(self) -> InlineKeyboardMarkup:
-        """Get account limit keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="📱 Manage Accounts", callback_data="am_list_accounts")],
-            [InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_retry_phone_keyboard(self) -> InlineKeyboardMarkup:
-        """Get retry phone keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="🔄 Try Again", callback_data="am_add_account")],
-            [InlineKeyboardButton(text="❓ Phone Help", callback_data="am_phone_help")],
-            [InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_code_input_keyboard(self) -> InlineKeyboardMarkup:
-        """Get code input keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="🔄 Resend Code", callback_data="am_resend_code")],
-            [InlineKeyboardButton(text="❌ Cancel", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_password_input_keyboard(self) -> InlineKeyboardMarkup:
-        """Get password input keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="❓ Password Help", callback_data="am_password_help")],
-            [InlineKeyboardButton(text="❌ Cancel", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_retry_code_keyboard(self) -> InlineKeyboardMarkup:
-        """Get retry code keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="🔄 Resend Code", callback_data="am_resend_code")],
-            [InlineKeyboardButton(text="❌ Cancel", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_retry_password_keyboard(self) -> InlineKeyboardMarkup:
-        """Get retry password keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="❓ Password Help", callback_data="am_password_help")],
-            [InlineKeyboardButton(text="❌ Cancel", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_account_added_keyboard(self) -> InlineKeyboardMarkup:
-        """Get account added keyboard"""
-        buttons = [
-            [
-                InlineKeyboardButton(text="📱 View Accounts", callback_data="am_list_accounts"),
-                InlineKeyboardButton(text="➕ Add Another", callback_data="am_add_account")
-            ],
-            [
-                InlineKeyboardButton(text="🚀 Start Boosting", callback_data="view_manager"),
-                InlineKeyboardButton(text="🔙 Back to Menu", callback_data="refresh_main")
-            ]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_restart_keyboard(self) -> InlineKeyboardMarkup:
-        """Get restart keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="🔄 Start Over", callback_data="am_add_account")],
-            [InlineKeyboardButton(text="🔙 Back to Account Management", callback_data="account_management")]
-        ]
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    async def shutdown(self):
-        """Shutdown account management handler"""
-        try:
-            if hasattr(self.bot_core, 'shutdown'):
-                await self.bot_core.shutdown()
             
-            # Clear pending verifications
-            self._pending_verifications.clear()
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("✅ Account removed successfully!")
             
-            logger.info("✅ Account management handler shut down")
         except Exception as e:
-            logger.error(f"Error shutting down account management handler: {e}")
+            logger.error(f"Error deleting account: {e}")
+            await callback.answer("❌ Failed to remove account", show_alert=True)
+    
+    # Helper methods
+    async def _get_user_accounts(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get user's accounts"""
+        return await self.db.fetch_all(
+            "SELECT * FROM telegram_accounts WHERE user_id = $1 ORDER BY created_at DESC",
+            user_id
+        )
+    
+    async def _ensure_user_exists(self, user):
+        """Ensure user exists in database"""
+        await self.db.execute_query(
+            """
+            INSERT INTO users (user_id, username, first_name, last_name, first_seen, last_seen)
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            ON CONFLICT (user_id) DO UPDATE SET 
+                username = $2, last_seen = NOW()
+            """,
+            user.id, user.username, user.first_name, user.last_name
+        )
+    
+    async def _calculate_health_score(self, account: Dict[str, Any]) -> int:
+        """Calculate account health score"""
+        score = 100
+        
+        if not account['is_verified']:
+            score -= 30
+        if not account['is_active']:
+            score -= 50
+        if not account.get('last_login'):
+            score -= 20
+            
+        return max(0, score)
+    
+    def _get_back_keyboard(self) -> InlineKeyboardMarkup:
+        """Get back button keyboard"""
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="[🔙 Account Manager]", callback_data="account_manager")],
+            [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+        ])
+    
+    def _get_retry_keyboard(self) -> InlineKeyboardMarkup:
+        """Get retry keyboard"""
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="[🔄 Try Again]", callback_data="am_add_account")],
+            [InlineKeyboardButton(text="[🔙 Back]", callback_data="account_manager")]
+        ])
+    

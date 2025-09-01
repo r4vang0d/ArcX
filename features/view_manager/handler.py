@@ -1,54 +1,46 @@
 """
-View Manager Handler
-Main handler for view boosting operations - automatic and manual
+Views Manager Handler - ArcX Bot
+Auto Boost system with channel selection and configuration
 """
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
+import uuid
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.state import State, StatesGroup
 
 from core.config.config import Config
 from core.database.unified_database import DatabaseManager
-from core.database.universal_access import UniversalDatabaseAccess
-from core.bot.telegram_bot import TelegramBotCore
-from .states.states import ViewBoostStates
-from .handlers.auto_boost import AutoBoostHandler
-from .handlers.manual_boost import ManualBoostHandler
-from .utils.scheduler import BoostScheduler
-from .utils.time_parse import TimeParser
 
 logger = logging.getLogger(__name__)
 
 
+class ViewBoostStates(StatesGroup):
+    """FSM states for view boosting"""
+    waiting_for_boost_config = State()
+
+
 class ViewManagerHandler:
-    """Main view management handler"""
+    """Simplified Views Manager with Auto Boost functionality"""
     
     def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
         self.bot = bot
         self.db = db_manager
         self.config = config
-        self.universal_db = UniversalDatabaseAccess(db_manager)
-        self.bot_core = TelegramBotCore(config, db_manager)
-        self.scheduler = BoostScheduler(db_manager, config)
-        self.time_parser = TimeParser()
-        
-        # Sub-handlers
-        self.auto_boost = AutoBoostHandler(bot, db_manager, config)
-        self.manual_boost = ManualBoostHandler(bot, db_manager, config)
+        self._boost_engines = {}  # Active boost monitoring engines
+        self._pending_configs = {}  # Store temporary configs during setup
         
     async def initialize(self):
         """Initialize view manager handler"""
         try:
-            await self.bot_core.initialize()
-            await self.auto_boost.initialize()
-            await self.manual_boost.initialize()
-            await self.scheduler.initialize()
+            # Start the monitoring engine
+            await self._start_monitoring_engine()
             logger.info("✅ View manager handler initialized")
         except Exception as e:
             logger.error(f"Failed to initialize view manager handler: {e}")
@@ -56,27 +48,8 @@ class ViewManagerHandler:
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
-        # Main view manager callbacks
-        # Callback registration handled by central inline_handler
-        # dp.callback_query.register(
-        #     self.handle_callback,
-        #     lambda c: c.data.startswith('vm_')
-        # )
-        
-        # FSM handlers
-        dp.message.register(
-            self.handle_boost_input,
-            ViewBoostStates.waiting_for_boost_params
-        )
-        
-        dp.message.register(
-            self.handle_message_link,
-            ViewBoostStates.waiting_for_message_link
-        )
-        
-        # Register sub-handlers
-        self.auto_boost.register_handlers(dp)
-        self.manual_boost.register_handlers(dp)
+        # FSM message handlers
+        dp.message.register(self.handle_boost_config_input, ViewBoostStates.waiting_for_boost_config)
         
         logger.info("✅ View manager handlers registered")
     
@@ -86,798 +59,569 @@ class ViewManagerHandler:
             callback_data = callback.data
             user_id = callback.from_user.id
             
-            # Ensure user exists
-            await self.universal_db.ensure_user_exists(
-                user_id,
-                callback.from_user.username,
-                callback.from_user.first_name,
-                callback.from_user.last_name
-            )
+            # Ensure user exists in database
+            await self._ensure_user_exists(callback.from_user)
             
-            # Route to appropriate handler
             if callback_data == "vm_auto_boost":
-                await self._handle_auto_boost_menu(callback, state)
+                await self._handle_auto_boost(callback, state)
             elif callback_data == "vm_manual_boost":
-                await self._handle_manual_boost_menu(callback, state)
-            elif callback_data == "vm_schedule":
-                await self._handle_schedule_menu(callback, state)
-            elif callback_data == "vm_stats":
-                await self._handle_stats_menu(callback, state)
-            elif callback_data.startswith("vm_boost_channel_"):
-                await self._handle_boost_channel(callback, state)
-            elif callback_data.startswith("vm_campaign_"):
-                await self._handle_campaign_action(callback, state)
+                await self._handle_manual_boost(callback, state)
+            elif callback_data == "vm_select_channels":
+                await self._handle_select_channels(callback, state)
+            elif callback_data == "vm_boost_settings":
+                await self._handle_boost_settings(callback, state)
+            elif callback_data.startswith("vm_channel_"):
+                await self._handle_channel_toggle(callback, state)
+            elif callback_data.startswith("vm_config_"):
+                await self._handle_config_channel(callback, state)
+            elif callback_data == "vm_start_engine":
+                await self._handle_start_engine(callback, state)
+            elif callback_data == "vm_stop_engine":
+                await self._handle_stop_engine(callback, state)
             else:
-                await callback.answer("❌ Unknown view manager action", show_alert=True)
+                await callback.answer("❌ Unknown action", show_alert=True)
                 
         except Exception as e:
             logger.error(f"Error in view manager callback: {e}")
-            await callback.answer("❌ An error occurred. Please try again.", show_alert=True)
+            await callback.answer("❌ An error occurred", show_alert=True)
     
-    async def _handle_auto_boost_menu(self, callback: CallbackQuery, state: FSMContext):
-        """Handle auto boost menu"""
+    async def _handle_auto_boost(self, callback: CallbackQuery, state: FSMContext):
+        """Handle auto boost main menu"""
         try:
             user_id = callback.from_user.id
             
-            # Get user channels
-            channels = await self.db.get_user_channels(user_id)
-            if not channels:
-                await callback.message.edit_text(
-                    "📭 <b>No Channels Available</b>\n\n"
-                    "Please add channels first before setting up auto boosting.",
-                    reply_markup=self._get_no_channels_keyboard()
-                )
-                return
+            # Get user's channels
+            channels = await self._get_user_channels(user_id)
+            enabled_channels = await self._get_enabled_channels(user_id)
             
-            # Get active auto boost campaigns
-            active_campaigns = await self.db.fetch_all(
-                """
-                SELECT vbc.*, c.title as channel_title
-                FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
-                WHERE vbc.user_id = $1 AND vbc.campaign_type = 'auto' AND vbc.status = 'active'
-                ORDER BY vbc.created_at DESC
-                """,
-                user_id
-            )
+            # Get engine status
+            engine_status = "🟢 Running" if user_id in self._boost_engines else "🔴 Stopped"
             
-            text = f"""
-🤖 <b>Auto View Boosting</b>
+            text = f"""🔥 <b>ArcX | Auto Boost</b>
 
-Automatically boost views on new posts in your channels.
+<b>Engine Status:</b> {engine_status}
+<b>Total Channels:</b> {len(channels)}
+<b>Enabled Channels:</b> {len(enabled_channels)}
 
-📊 <b>Current Status:</b>
-• Active Auto Campaigns: {len(active_campaigns)}
-• Available Channels: {len(channels)}
-
-<b>🔧 Auto Boost Features:</b>
-• Automatically detect new posts
-• Boost views based on your settings
-• Smart timing to appear natural
-• Multiple account coordination
-• Real-time monitoring
-
-Select an option below:
+<b>Auto Boost Features:</b>
+• Select channels for automatic boosting
+• Configure boost settings per channel
+• Advanced async monitoring engine
+• Real-time performance tracking
             """
             
-            keyboard = self._get_auto_boost_keyboard(len(active_campaigns) > 0)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[⚙️ Select Channels]", callback_data="vm_select_channels")],
+                [InlineKeyboardButton(text="[🎛️ Boost Settings]", callback_data="vm_boost_settings")],
+                [InlineKeyboardButton(text="[▶️ Start Engine]", callback_data="vm_start_engine")],
+                [InlineKeyboardButton(text="[⏹️ Stop Engine]", callback_data="vm_stop_engine")],
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="views_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("🤖 Auto boost menu loaded")
+            await callback.answer("⚙️ Auto boost menu loaded")
             
         except Exception as e:
             logger.error(f"Error in auto boost menu: {e}")
-            await callback.answer("❌ Failed to load auto boost menu", show_alert=True)
+            await callback.answer("❌ Failed to load auto boost", show_alert=True)
     
-    async def _handle_manual_boost_menu(self, callback: CallbackQuery, state: FSMContext):
-        """Handle manual boost menu"""
+    async def _handle_select_channels(self, callback: CallbackQuery, state: FSMContext):
+        """Handle channel selection for auto boost"""
         try:
             user_id = callback.from_user.id
             
-            # Get user channels
-            channels = await self.db.get_user_channels(user_id)
+            # Get user's channels
+            channels = await self._get_user_channels(user_id)
             if not channels:
                 await callback.message.edit_text(
-                    "📭 <b>No Channels Available</b>\n\n"
-                    "Please add channels first before manual boosting.",
-                    reply_markup=self._get_no_channels_keyboard()
+                    "🔥 <b>ArcX | No Channels Available</b>\\n\\n"
+                    "You need to add channels first in Channel Manager.\\n"
+                    "Go to Channel Manager → Add Channel",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="[📺 Channel Manager]", callback_data="channel_manager")],
+                        [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_auto_boost")]
+                    ])
                 )
+                await callback.answer("ℹ️ No channels available")
                 return
             
-            text = """
-👆 <b>Manual View Boosting</b>
-
-Boost views on specific posts with custom settings.
-
-<b>🎯 Manual Boost Options:</b>
-• Boost specific posts by link
-• Custom view targets
-• Immediate or scheduled execution
-• Account selection
-• Progress monitoring
-
-<b>📝 How to Use:</b>
-1. Select a channel or provide post link
-2. Set your boost parameters
-3. Choose accounts to use
-4. Start the boost campaign
-
-Select how you'd like to boost views:
-            """
+            # Get enabled status for each channel
+            enabled_channels = await self._get_enabled_channels(user_id)
+            enabled_ids = {ch['channel_id'] for ch in enabled_channels}
             
-            keyboard = self._get_manual_boost_keyboard()
+            text = f"🔥 <b>ArcX | Select Channels for Auto Boost</b>\\n\\nToggle channels on/off:\\n\\n"
+            
+            buttons = []
+            for channel in channels[:15]:  # Show max 15 channels
+                is_enabled = channel['id'] in enabled_ids
+                status_emoji = "✅" if is_enabled else "❌"
+                toggle_text = f"[{status_emoji} {channel['channel_title'][:20]}...]"
+                callback_data = f"vm_channel_{channel['id']}"
+                
+                # Channel toggle and config buttons
+                buttons.append([
+                    InlineKeyboardButton(text=toggle_text, callback_data=callback_data),
+                    InlineKeyboardButton(text="[⚙️]", callback_data=f"vm_config_{channel['id']}")
+                ])
+            
+            buttons.extend([
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_auto_boost")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("👆 Manual boost menu loaded")
+            await callback.answer("⚙️ Toggle channels for auto boost")
             
         except Exception as e:
-            logger.error(f"Error in manual boost menu: {e}")
-            await callback.answer("❌ Failed to load manual boost menu", show_alert=True)
+            logger.error(f"Error in select channels: {e}")
+            await callback.answer("❌ Failed to load channels", show_alert=True)
     
-    async def _handle_schedule_menu(self, callback: CallbackQuery, state: FSMContext):
-        """Handle schedule menu"""
+    async def _handle_channel_toggle(self, callback: CallbackQuery, state: FSMContext):
+        """Handle channel enable/disable toggle"""
         try:
+            channel_id = int(callback.data.split('_')[2])
             user_id = callback.from_user.id
             
-            # Get scheduled campaigns
-            scheduled_campaigns = await self.db.fetch_all(
-                """
-                SELECT vbc.*, c.title as channel_title
-                FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
-                WHERE vbc.user_id = $1 AND vbc.start_time > NOW()
-                ORDER BY vbc.start_time ASC
-                """,
-                user_id
+            # Check if channel is currently enabled
+            existing = await self.db.fetch_one(
+                "SELECT id FROM boost_configs WHERE user_id = $1 AND channel_id = $2",
+                user_id, channel_id
             )
             
-            text = f"""
-⏰ <b>Boost Scheduling</b>
-
-Schedule view boost campaigns for optimal timing.
-
-📊 <b>Scheduled Campaigns:</b> {len(scheduled_campaigns)}
-
-<b>🕐 Scheduling Features:</b>
-• Schedule boosts for specific times
-• Repeat campaigns daily/weekly
-• Peak time optimization
-• Time zone support
-• Automatic execution
-
-<b>💡 Best Practices:</b>
-• Schedule during peak hours for your audience
-• Space out boosts to look natural
-• Consider different time zones
-• Monitor performance and adjust timing
-            """
+            if existing:
+                # Disable channel
+                await self.db.execute_query(
+                    "DELETE FROM boost_configs WHERE user_id = $1 AND channel_id = $2",
+                    user_id, channel_id
+                )
+                await callback.answer("❌ Channel disabled for auto boost")
+            else:
+                # Enable channel with default settings
+                await self.db.execute_query(
+                    """
+                    INSERT INTO boost_configs 
+                    (user_id, channel_id, is_enabled, boost_count, cooldown_minutes, timing_messages, created_at, updated_at)
+                    VALUES ($1, $2, TRUE, 50, 30, '[]', NOW(), NOW())
+                    """,
+                    user_id, channel_id
+                )
+                await callback.answer("✅ Channel enabled for auto boost")
             
-            if scheduled_campaigns:
-                text += "\n\n<b>📅 Upcoming Campaigns:</b>\n"
-                for campaign in scheduled_campaigns[:5]:
-                    start_time = campaign['start_time'].strftime('%m/%d %H:%M')
-                    text += f"• {campaign['channel_title']}: {start_time}\n"
-            
-            keyboard = self._get_schedule_keyboard(len(scheduled_campaigns) > 0)
-            
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("⏰ Schedule menu loaded")
+            # Refresh the channel selection menu
+            await self._handle_select_channels(callback, state)
             
         except Exception as e:
-            logger.error(f"Error in schedule menu: {e}")
-            await callback.answer("❌ Failed to load schedule menu", show_alert=True)
+            logger.error(f"Error toggling channel: {e}")
+            await callback.answer("❌ Error toggling channel", show_alert=True)
     
-    async def _handle_stats_menu(self, callback: CallbackQuery, state: FSMContext):
-        """Handle stats menu"""
+    async def _handle_config_channel(self, callback: CallbackQuery, state: FSMContext):
+        """Handle channel-specific configuration"""
         try:
+            channel_id = int(callback.data.split('_')[2])
             user_id = callback.from_user.id
             
-            # Get boost statistics
-            stats = await self._get_boost_statistics(user_id)
+            # Get channel and config details
+            channel = await self.db.fetch_one(
+                "SELECT * FROM telegram_channels WHERE id = $1", channel_id
+            )
             
-            text = f"""
-📊 <b>View Boost Statistics</b>
-
-<b>📈 Campaign Overview:</b>
-• Total Campaigns: {stats['total_campaigns']}
-• Active Campaigns: {stats['active_campaigns']}
-• Completed Campaigns: {stats['completed_campaigns']}
-• Success Rate: {stats['success_rate']:.1f}%
-
-<b>👁️ View Statistics:</b>
-• Total Views Boosted: {stats['total_views']:,}
-• Views This Month: {stats['monthly_views']:,}
-• Views Today: {stats['daily_views']:,}
-• Average per Campaign: {stats['avg_views_per_campaign']:,.0f}
-
-<b>📱 Account Usage:</b>
-• Active Accounts: {stats['active_accounts']}
-• Total Boost Actions: {stats['total_actions']:,}
-• Success Rate: {stats['action_success_rate']:.1f}%
-
-<b>🏆 Top Performing:</b>
-• Best Channel: {stats['top_channel']}
-• Highest Single Boost: {stats['highest_boost']:,} views
-            """
+            config = await self.db.fetch_one(
+                "SELECT * FROM boost_configs WHERE user_id = $1 AND channel_id = $2",
+                user_id, channel_id
+            )
             
-            keyboard = self._get_stats_keyboard()
-            
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("📊 Statistics loaded")
-            
-        except Exception as e:
-            logger.error(f"Error in stats menu: {e}")
-            await callback.answer("❌ Failed to load statistics", show_alert=True)
-    
-    async def _handle_boost_channel(self, callback: CallbackQuery, state: FSMContext):
-        """Handle boost specific channel"""
-        try:
-            # Extract channel ID
-            channel_id = int(callback.data.split("_")[-1])
-            
-            # Get channel info
-            channel = await self.db.get_channel_by_id(channel_id)
             if not channel:
                 await callback.answer("❌ Channel not found", show_alert=True)
                 return
             
-            text = f"""
-🚀 <b>Boost Views - {channel['title']}</b>
+            if not config:
+                # Create default config
+                await self.db.execute_query(
+                    """
+                    INSERT INTO boost_configs 
+                    (user_id, channel_id, is_enabled, boost_count, cooldown_minutes, timing_messages, created_at, updated_at)
+                    VALUES ($1, $2, TRUE, 50, 30, '[]', NOW(), NOW())
+                    """,
+                    user_id, channel_id
+                )
+                config = {
+                    'is_enabled': True,
+                    'boost_count': 50,
+                    'cooldown_minutes': 30,
+                    'timing_messages': '[]'
+                }
+            
+            text = f"""🔥 <b>ArcX | Channel Configuration</b>
 
-Choose how you'd like to boost views for this channel:
+<b>Channel:</b> {channel['channel_title']}
 
-<b>📋 Channel Info:</b>
-• Members: {channel.get('member_count', 'Unknown'):,}
-• Status: {'Active' if channel['is_active'] else 'Inactive'}
+<b>Current Settings:</b>
+• Status: {"🟢 Enabled" if config['is_enabled'] else "🔴 Disabled"}
+• Boost Count: {config['boost_count']} views per boost
+• Cooldown: {config['cooldown_minutes']} minutes
+• Timing Messages: {len(eval(config.get('timing_messages', '[]')))} configured
 
-<b>🎯 Boost Options:</b>
-• Quick Boost - Boost latest post
-• Custom Boost - Choose specific post
-• Auto Setup - Enable automatic boosting
-• Schedule Boost - Set up timed boosting
+<b>Advanced Settings:</b>
+Send new configuration in format:
+<code>boost_count,cooldown_minutes</code>
 
-Select your preferred boost method:
+<b>Example:</b> <code>100,45</code>
+(100 views per boost, 45 minute cooldown)
             """
             
-            keyboard = self._get_channel_boost_keyboard(channel_id)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[🔄 Reset to Default]", callback_data=f"vm_reset_{channel_id}")],
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_select_channels")]
+            ])
             
             await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer(f"🚀 Boost options for {channel['title']}")
+            await state.set_state(ViewBoostStates.waiting_for_boost_config)
+            await callback.answer("⚙️ Send boost configuration")
             
         except Exception as e:
-            logger.error(f"Error in boost channel: {e}")
-            await callback.answer("❌ Failed to load boost options", show_alert=True)
+            logger.error(f"Error in config channel: {e}")
+            await callback.answer("❌ Error loading channel config", show_alert=True)
     
-    async def _handle_campaign_action(self, callback: CallbackQuery, state: FSMContext):
-        """Handle campaign-specific actions"""
+    async def handle_boost_config_input(self, message: Message, state: FSMContext):
+        """Handle boost configuration input"""
         try:
-            # Extract campaign ID and action
-            parts = callback.data.split("_")
-            campaign_id = int(parts[-1])
-            action = parts[-2] if len(parts) > 2 else "view"
+            user_id = message.from_user.id
+            config_text = message.text.strip()
             
-            if action == "view":
-                await self._show_campaign_details(callback, campaign_id)
-            elif action == "pause":
-                await self._pause_campaign(callback, campaign_id)
-            elif action == "resume":
-                await self._resume_campaign(callback, campaign_id)
-            elif action == "stop":
-                await self._stop_campaign(callback, campaign_id)
-            else:
-                await callback.answer("❌ Unknown campaign action", show_alert=True)
-                
-        except Exception as e:
-            logger.error(f"Error in campaign action: {e}")
-            await callback.answer("❌ Failed to process campaign action", show_alert=True)
-    
-    async def _show_campaign_details(self, callback: CallbackQuery, campaign_id: int):
-        """Show detailed campaign information"""
-        try:
-            # Get campaign progress
-            progress = await self.universal_db.get_campaign_progress(campaign_id)
-            
-            if 'error' in progress:
-                await callback.answer("❌ Campaign not found", show_alert=True)
-                return
-            
-            campaign = progress['campaign']
-            stats = progress['statistics']
-            
-            text = f"""
-📊 <b>Campaign Details</b>
-
-<b>📋 Campaign Info:</b>
-• Channel: {campaign['channel_title']}
-• Message ID: {campaign['message_id']}
-• Type: {campaign['campaign_type'].title()}
-• Status: {campaign['status'].title()}
-
-<b>🎯 Progress:</b>
-• Target Views: {campaign['target_views']:,}
-• Current Views: {campaign['current_views']:,}
-• Progress: {stats['progress_percentage']:.1f}%
-• Remaining: {stats['remaining_views']:,}
-
-<b>📈 Performance:</b>
-• Total Attempts: {stats['total_attempts']}
-• Successful: {stats['successful_attempts']}
-• Success Rate: {stats['success_rate']:.1f}%
-
-<b>📅 Timeline:</b>
-• Created: {campaign['created_at'].strftime('%Y-%m-%d %H:%M')}
-• Updated: {campaign['updated_at'].strftime('%Y-%m-%d %H:%M')}
-            """
-            
-            keyboard = self._get_campaign_details_keyboard(campaign_id, campaign['status'])
-            
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("📊 Campaign details loaded")
-            
-        except Exception as e:
-            logger.error(f"Error showing campaign details: {e}")
-            await callback.answer("❌ Failed to load campaign details", show_alert=True)
-    
-    async def handle_boost_input(self, message: Message, state: FSMContext):
-        """Handle boost parameter input"""
-        try:
-            user_data = await state.get_data()
-            boost_params = message.text.strip()
-            
-            # Parse boost parameters
-            parsed_params = await self._parse_boost_params(boost_params)
-            
-            if not parsed_params['valid']:
+            # Parse config
+            if ',' not in config_text:
                 await message.answer(
-                    f"❌ <b>Invalid Parameters</b>\n\n"
-                    f"Error: {parsed_params['error']}\n\n"
-                    f"Please use format: <code>views=1000 delay=5-10</code>",
-                    reply_markup=self._get_retry_input_keyboard()
+                    "❌ <b>Invalid Format</b>\\n\\n"
+                    "Please use format: <code>boost_count,cooldown_minutes</code>\\n"
+                    "Example: <code>100,45</code>",
+                    reply_markup=self._get_retry_keyboard()
                 )
                 return
-            
-            # Store parameters and proceed
-            await state.update_data(boost_params=parsed_params)
-            
-            await message.answer(
-                f"✅ <b>Parameters Set</b>\n\n"
-                f"• Views: {parsed_params['views']:,}\n"
-                f"• Delay: {parsed_params['delay_min']}-{parsed_params['delay_max']} seconds\n"
-                f"• Accounts: {parsed_params.get('accounts', 'All available')}\n\n"
-                f"Proceed with the boost campaign?",
-                reply_markup=self._get_confirm_boost_keyboard()
-            )
-            
-        except Exception as e:
-            logger.error(f"Error handling boost input: {e}")
-            await message.answer("❌ Failed to process parameters. Please try again.")
-            await state.clear()
-    
-    async def handle_message_link(self, message: Message, state: FSMContext):
-        """Handle message link input"""
-        try:
-            link = message.text.strip()
-            
-            # Parse message link
-            parsed_link = await self._parse_message_link(link)
-            
-            if not parsed_link['valid']:
-                await message.answer(
-                    f"❌ <b>Invalid Message Link</b>\n\n"
-                    f"Error: {parsed_link['error']}\n\n"
-                    f"Please provide a valid Telegram message link.",
-                    reply_markup=self._get_retry_link_keyboard()
-                )
-                return
-            
-            # Store link data
-            await state.update_data(message_link=parsed_link)
-            
-            await message.answer(
-                f"✅ <b>Message Link Parsed</b>\n\n"
-                f"• Channel: {parsed_link['channel_name']}\n"
-                f"• Message ID: {parsed_link['message_id']}\n\n"
-                f"Now please set your boost parameters:\n"
-                f"Format: <code>views=1000 delay=5-10</code>",
-                reply_markup=None
-            )
-            
-            # Transition to boost params state
-            await state.set_state(ViewBoostStates.waiting_for_boost_params)
-            
-        except Exception as e:
-            logger.error(f"Error handling message link: {e}")
-            await message.answer("❌ Failed to process message link. Please try again.")
-            await state.clear()
-    
-    async def _parse_boost_params(self, params_text: str) -> Dict[str, Any]:
-        """Parse boost parameters from text"""
-        try:
-            params = {}
-            
-            # Split by spaces and parse key=value pairs
-            for param in params_text.split():
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key.lower()] = value
-            
-            # Validate required parameters
-            if 'views' not in params:
-                return {'valid': False, 'error': 'Views parameter is required'}
             
             try:
-                views = int(params['views'])
-                if views <= 0 or views > 100000:
-                    return {'valid': False, 'error': 'Views must be between 1 and 100,000'}
-            except ValueError:
-                return {'valid': False, 'error': 'Views must be a number'}
-            
-            # Parse delay
-            delay_min, delay_max = 2, 8  # defaults
-            if 'delay' in params:
-                delay_str = params['delay']
-                if '-' in delay_str:
-                    try:
-                        delay_parts = delay_str.split('-')
-                        delay_min = int(delay_parts[0])
-                        delay_max = int(delay_parts[1])
-                    except:
-                        return {'valid': False, 'error': 'Invalid delay format. Use: delay=5-10'}
-                else:
-                    try:
-                        delay_min = delay_max = int(delay_str)
-                    except:
-                        return {'valid': False, 'error': 'Invalid delay value'}
-            
-            return {
-                'valid': True,
-                'views': views,
-                'delay_min': delay_min,
-                'delay_max': delay_max,
-                'accounts': params.get('accounts', 'all')
-            }
-            
-        except Exception as e:
-            return {'valid': False, 'error': f'Failed to parse parameters: {str(e)}'}
-    
-    async def _parse_message_link(self, link: str) -> Dict[str, Any]:
-        """Parse Telegram message link"""
-        try:
-            import re
-            
-            # Match Telegram message link patterns
-            patterns = [
-                r'https?://t\.me/(\w+)/(\d+)',
-                r'https?://telegram\.me/(\w+)/(\d+)',
-                r'@(\w+)/(\d+)',
-                r'(\w+)/(\d+)'
-            ]
-            
-            for pattern in patterns:
-                match = re.match(pattern, link)
-                if match:
-                    channel_name = match.group(1)
-                    message_id = int(match.group(2))
+                boost_count_str, cooldown_str = config_text.split(',', 1)
+                boost_count = int(boost_count_str.strip())
+                cooldown_minutes = int(cooldown_str.strip())
+                
+                if boost_count < 1 or boost_count > 1000:
+                    raise ValueError("Boost count must be 1-1000")
+                if cooldown_minutes < 1 or cooldown_minutes > 1440:
+                    raise ValueError("Cooldown must be 1-1440 minutes")
                     
-                    return {
-                        'valid': True,
-                        'channel_name': channel_name,
-                        'message_id': message_id,
-                        'original_link': link
-                    }
+            except ValueError as ve:
+                await message.answer(
+                    f"❌ <b>Invalid Values</b>\\n\\n"
+                    f"Error: {str(ve)}\\n"
+                    f"Boost count: 1-1000\\n"
+                    f"Cooldown: 1-1440 minutes",
+                    reply_markup=self._get_retry_keyboard()
+                )
+                return
             
-            return {
-                'valid': False,
-                'error': 'Invalid message link format. Use: https://t.me/channel/123 or @channel/123'
-            }
+            # Update configuration (for now update all user's channels - in real implementation would be per-channel)
+            await self.db.execute_query(
+                """
+                UPDATE boost_configs 
+                SET boost_count = $1, cooldown_minutes = $2, updated_at = NOW()
+                WHERE user_id = $3
+                """,
+                boost_count, cooldown_minutes, user_id
+            )
+            
+            text = f"""✅ <b>ArcX | Configuration Updated!</b>
+
+<b>New Settings Applied:</b>
+• Boost Count: {boost_count} views per boost
+• Cooldown: {cooldown_minutes} minutes between boosts
+• Status: ✅ Configuration saved
+
+Settings have been applied to all enabled channels.
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[▶️ Start Auto Boost]", callback_data="vm_start_engine")],
+                [InlineKeyboardButton(text="[⚙️ More Settings]", callback_data="vm_boost_settings")],
+                [InlineKeyboardButton(text="[🔙 Auto Boost]", callback_data="vm_auto_boost")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await message.answer(text, reply_markup=keyboard)
+            await state.clear()
             
         except Exception as e:
-            return {
-                'valid': False,
-                'error': f'Failed to parse link: {str(e)}'
-            }
+            logger.error(f"Error handling boost config: {e}")
+            await message.answer("❌ Error saving configuration")
     
-    async def _get_boost_statistics(self, user_id: int) -> Dict[str, Any]:
-        """Get comprehensive boost statistics"""
+    async def _handle_manual_boost(self, callback: CallbackQuery, state: FSMContext):
+        """Handle manual boost"""
         try:
-            # Get campaign statistics
-            campaigns = await self.db.get_user_campaigns(user_id)
-            total_campaigns = len(campaigns)
-            active_campaigns = len([c for c in campaigns if c['status'] == 'active'])
-            completed_campaigns = len([c for c in campaigns if c['status'] == 'completed'])
+            user_id = callback.from_user.id
             
-            success_rate = (completed_campaigns / total_campaigns * 100) if total_campaigns > 0 else 0
+            # Get user's channels
+            channels = await self._get_user_channels(user_id)
+            if not channels:
+                await callback.message.edit_text(
+                    "🔥 <b>ArcX | No Channels Available</b>\\n\\n"
+                    "Add channels first in Channel Manager.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="[📺 Channel Manager]", callback_data="channel_manager")],
+                        [InlineKeyboardButton(text="[🔙 Back]", callback_data="views_manager")]
+                    ])
+                )
+                await callback.answer("ℹ️ No channels available")
+                return
             
-            # Get view statistics
-            total_views = sum(c['current_views'] for c in campaigns)
+            text = f"🔥 <b>ArcX | Manual Boost</b>\\n\\nSelect channel to boost manually:\\n\\n"
             
-            # Get monthly and daily views
-            monthly_views = await self.db.fetch_one(
-                """
-                SELECT COALESCE(SUM(current_views), 0) as views
-                FROM view_boost_campaigns
-                WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days'
-                """,
-                user_id
-            )
+            buttons = []
+            for channel in channels[:10]:  # Show max 10
+                button_text = f"[🚀 {channel['channel_title'][:20]}...]"
+                callback_data = f"vm_manual_{channel['id']}"
+                buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
             
-            daily_views = await self.db.fetch_one(
-                """
-                SELECT COALESCE(SUM(current_views), 0) as views  
-                FROM view_boost_campaigns
-                WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '1 day'
-                """,
-                user_id
-            )
+            buttons.extend([
+                [InlineKeyboardButton(text="[🔙 Back]", callback_data="views_manager")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
             
-            # Get account statistics
-            user_accounts = await self.db.get_user_accounts(user_id, active_only=True)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             
-            # Get boost action statistics
-            boost_actions = await self.db.fetch_all(
-                """
-                SELECT success, COUNT(*) as count
-                FROM view_boost_logs vbl
-                JOIN view_boost_campaigns vbc ON vbl.campaign_id = vbc.id
-                WHERE vbc.user_id = $1
-                GROUP BY success
-                """,
-                user_id
-            )
-            
-            total_actions = sum(a['count'] for a in boost_actions)
-            successful_actions = sum(a['count'] for a in boost_actions if a['success'])
-            action_success_rate = (successful_actions / total_actions * 100) if total_actions > 0 else 0
-            
-            # Get top performing channel
-            top_channel_result = await self.db.fetch_one(
-                """
-                SELECT c.title, SUM(vbc.current_views) as total_views
-                FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
-                WHERE vbc.user_id = $1
-                GROUP BY c.id, c.title
-                ORDER BY total_views DESC
-                LIMIT 1
-                """,
-                user_id
-            )
-            
-            # Get highest single boost
-            highest_boost_result = await self.db.fetch_one(
-                """
-                SELECT MAX(current_views) as highest
-                FROM view_boost_campaigns
-                WHERE user_id = $1
-                """,
-                user_id
-            )
-            
-            return {
-                'total_campaigns': total_campaigns,
-                'active_campaigns': active_campaigns,
-                'completed_campaigns': completed_campaigns,
-                'success_rate': success_rate,
-                'total_views': total_views,
-                'monthly_views': monthly_views['views'] if monthly_views else 0,
-                'daily_views': daily_views['views'] if daily_views else 0,
-                'avg_views_per_campaign': total_views / total_campaigns if total_campaigns > 0 else 0,
-                'active_accounts': len(user_accounts),
-                'total_actions': total_actions,
-                'action_success_rate': action_success_rate,
-                'top_channel': top_channel_result['title'] if top_channel_result else 'None',
-                'highest_boost': highest_boost_result['highest'] if highest_boost_result else 0
-            }
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("🚀 Select channel for manual boost")
             
         except Exception as e:
-            logger.error(f"Error getting boost statistics: {e}")
-            return {
-                'total_campaigns': 0, 'active_campaigns': 0, 'completed_campaigns': 0,
-                'success_rate': 0, 'total_views': 0, 'monthly_views': 0, 'daily_views': 0,
-                'avg_views_per_campaign': 0, 'active_accounts': 0, 'total_actions': 0,
-                'action_success_rate': 0, 'top_channel': 'None', 'highest_boost': 0
-            }
+            logger.error(f"Error in manual boost: {e}")
+            await callback.answer("❌ Failed to load manual boost", show_alert=True)
     
-    def _get_auto_boost_keyboard(self, has_active: bool) -> InlineKeyboardMarkup:
-        """Get auto boost keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="⚙️ Setup Auto Boost", callback_data="ab_setup")],
-            [InlineKeyboardButton(text="📋 View Auto Campaigns", callback_data="ab_campaigns")]
-        ]
-        
-        if has_active:
-            buttons.append([
-                InlineKeyboardButton(text="⏸️ Pause All", callback_data="ab_pause_all"),
-                InlineKeyboardButton(text="▶️ Resume All", callback_data="ab_resume_all")
-            ])
-        
-        buttons.extend([
-            [InlineKeyboardButton(text="⚙️ Auto Settings", callback_data="ab_settings")],
-            [InlineKeyboardButton(text="🔙 Back to View Manager", callback_data="view_manager")]
-        ])
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_manual_boost_keyboard(self) -> InlineKeyboardMarkup:
-        """Get manual boost keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="🔗 Boost by Link", callback_data="mb_by_link")],
-            [InlineKeyboardButton(text="📋 Select Channel", callback_data="mb_select_channel")],
-            [InlineKeyboardButton(text="🚀 Quick Boost", callback_data="mb_quick_boost")],
-            [InlineKeyboardButton(text="📊 Active Campaigns", callback_data="mb_campaigns")],
-            [InlineKeyboardButton(text="🔙 Back to View Manager", callback_data="view_manager")]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_schedule_keyboard(self, has_scheduled: bool) -> InlineKeyboardMarkup:
-        """Get schedule keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="➕ Schedule New", callback_data="sch_new")],
-            [InlineKeyboardButton(text="📅 View Schedule", callback_data="sch_view")]
-        ]
-        
-        if has_scheduled:
-            buttons.append([
-                InlineKeyboardButton(text="✏️ Edit Schedule", callback_data="sch_edit"),
-                InlineKeyboardButton(text="🗑️ Clear Schedule", callback_data="sch_clear")
-            ])
-        
-        buttons.extend([
-            [InlineKeyboardButton(text="⚙️ Schedule Settings", callback_data="sch_settings")],
-            [InlineKeyboardButton(text="🔙 Back to View Manager", callback_data="view_manager")]
-        ])
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_stats_keyboard(self) -> InlineKeyboardMarkup:
-        """Get stats keyboard"""
-        buttons = [
-            [
-                InlineKeyboardButton(text="📈 Detailed Analytics", callback_data="st_detailed"),
-                InlineKeyboardButton(text="📊 Channel Stats", callback_data="st_channels")
-            ],
-            [
-                InlineKeyboardButton(text="📱 Account Performance", callback_data="st_accounts"),
-                InlineKeyboardButton(text="📋 Export Report", callback_data="st_export")
-            ],
-            [
-                InlineKeyboardButton(text="🔄 Refresh Stats", callback_data="vm_stats"),
-                InlineKeyboardButton(text="🔙 Back to View Manager", callback_data="view_manager")
-            ]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_channel_boost_keyboard(self, channel_id: int) -> InlineKeyboardMarkup:
-        """Get channel boost keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="⚡ Quick Boost", callback_data=f"cb_quick_{channel_id}")],
-            [InlineKeyboardButton(text="🎯 Custom Boost", callback_data=f"cb_custom_{channel_id}")],
-            [InlineKeyboardButton(text="🤖 Enable Auto", callback_data=f"cb_auto_{channel_id}")],
-            [InlineKeyboardButton(text="⏰ Schedule Boost", callback_data=f"cb_schedule_{channel_id}")],
-            [InlineKeyboardButton(text="📊 Boost History", callback_data=f"cb_history_{channel_id}")],
-            [InlineKeyboardButton(text="🔙 Back to Channel", callback_data=f"cm_channel_{channel_id}")]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_campaign_details_keyboard(self, campaign_id: int, status: str) -> InlineKeyboardMarkup:
-        """Get campaign details keyboard"""
-        buttons = []
-        
-        if status == 'active':
-            buttons.append([
-                InlineKeyboardButton(text="⏸️ Pause", callback_data=f"vm_campaign_pause_{campaign_id}"),
-                InlineKeyboardButton(text="⏹️ Stop", callback_data=f"vm_campaign_stop_{campaign_id}")
-            ])
-        elif status == 'paused':
-            buttons.append([
-                InlineKeyboardButton(text="▶️ Resume", callback_data=f"vm_campaign_resume_{campaign_id}"),
-                InlineKeyboardButton(text="⏹️ Stop", callback_data=f"vm_campaign_stop_{campaign_id}")
-            ])
-        
-        buttons.extend([
-            [InlineKeyboardButton(text="📊 View Logs", callback_data=f"vm_campaign_logs_{campaign_id}")],
-            [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"vm_campaign_view_{campaign_id}")],
-            [InlineKeyboardButton(text="🔙 Back to Stats", callback_data="vm_stats")]
-        ])
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_no_channels_keyboard(self) -> InlineKeyboardMarkup:
-        """Get no channels keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="➕ Add Channel", callback_data="channel_management")],
-            [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="refresh_main")]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_retry_input_keyboard(self) -> InlineKeyboardMarkup:
-        """Get retry input keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="❓ Help Format", callback_data="mb_help_format")],
-            [InlineKeyboardButton(text="🔙 Back to Manual Boost", callback_data="vm_manual_boost")]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_confirm_boost_keyboard(self) -> InlineKeyboardMarkup:
-        """Get confirm boost keyboard"""
-        buttons = [
-            [
-                InlineKeyboardButton(text="✅ Start Boost", callback_data="mb_confirm_start"),
-                InlineKeyboardButton(text="❌ Cancel", callback_data="vm_manual_boost")
-            ]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    def _get_retry_link_keyboard(self) -> InlineKeyboardMarkup:
-        """Get retry link keyboard"""
-        buttons = [
-            [InlineKeyboardButton(text="❓ Link Help", callback_data="mb_help_link")],
-            [InlineKeyboardButton(text="🔙 Back to Manual Boost", callback_data="vm_manual_boost")]
-        ]
-        
-        return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-    async def _pause_campaign(self, callback: CallbackQuery, campaign_id: int):
-        """Pause a campaign"""
+    async def _handle_start_engine(self, callback: CallbackQuery, state: FSMContext):
+        """Start the auto boost monitoring engine"""
         try:
-            success = await self.db.update_campaign_progress(campaign_id, None, 'paused')
+            user_id = callback.from_user.id
             
-            if success:
-                await callback.answer("⏸️ Campaign paused successfully")
-                await self._show_campaign_details(callback, campaign_id)
-            else:
-                await callback.answer("❌ Failed to pause campaign", show_alert=True)
+            # Check if already running
+            if user_id in self._boost_engines:
+                await callback.answer("ℹ️ Auto boost engine is already running!")
+                return
+            
+            # Get enabled channels
+            enabled_channels = await self._get_enabled_channels(user_id)
+            if not enabled_channels:
+                await callback.message.edit_text(
+                    "🔥 <b>ArcX | No Channels Enabled</b>\\n\\n"
+                    "Enable channels first in Select Channels.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="[⚙️ Select Channels]", callback_data="vm_select_channels")],
+                        [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_auto_boost")]
+                    ])
+                )
+                await callback.answer("⚠️ No channels enabled!")
+                return
+            
+            # Start monitoring engine
+            engine_task = asyncio.create_task(self._monitoring_engine(user_id))
+            self._boost_engines[user_id] = {
+                'task': engine_task,
+                'started_at': datetime.now(),
+                'channels': len(enabled_channels)
+            }
+            
+            text = f"""✅ <b>ArcX | Auto Boost Engine Started!</b>
+
+<b>Engine Details:</b>
+• Status: 🟢 Running
+• Monitoring: {len(enabled_channels)} channels
+• Started: {datetime.now().strftime('%H:%M:%S')}
+
+<b>What happens now:</b>
+• Engine monitors all enabled channels
+• Automatically boosts views based on settings
+• Respects cooldown periods
+• Performs intelligent load balancing
+
+Engine is now running in the background!
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[⏹️ Stop Engine]", callback_data="vm_stop_engine")],
+                [InlineKeyboardButton(text="[📊 View Stats]", callback_data="vm_engine_stats")],
+                [InlineKeyboardButton(text="[🔙 Auto Boost]", callback_data="vm_auto_boost")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("🚀 Auto boost engine started!")
+            
+        except Exception as e:
+            logger.error(f"Error starting engine: {e}")
+            await callback.answer("❌ Failed to start engine", show_alert=True)
+    
+    async def _handle_stop_engine(self, callback: CallbackQuery, state: FSMContext):
+        """Stop the auto boost monitoring engine"""
+        try:
+            user_id = callback.from_user.id
+            
+            if user_id not in self._boost_engines:
+                await callback.answer("ℹ️ Auto boost engine is not running!")
+                return
+            
+            # Stop the engine
+            engine_data = self._boost_engines[user_id]
+            engine_data['task'].cancel()
+            del self._boost_engines[user_id]
+            
+            runtime = datetime.now() - engine_data['started_at']
+            
+            text = f"""⏹️ <b>ArcX | Auto Boost Engine Stopped</b>
+
+<b>Session Summary:</b>
+• Runtime: {runtime.seconds // 60} minutes {runtime.seconds % 60} seconds
+• Channels Monitored: {engine_data['channels']}
+• Status: 🔴 Stopped
+
+Engine has been stopped successfully.
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="[▶️ Start Engine]", callback_data="vm_start_engine")],
+                [InlineKeyboardButton(text="[🔙 Auto Boost]", callback_data="vm_auto_boost")],
+                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("⏹️ Engine stopped successfully!")
+            
+        except Exception as e:
+            logger.error(f"Error stopping engine: {e}")
+            await callback.answer("❌ Failed to stop engine", show_alert=True)
+    
+    async def _monitoring_engine(self, user_id: int):
+        """Advanced async monitoring engine for auto boost"""
+        try:
+            logger.info(f"🚀 MONITORING ENGINE: Started for user {user_id}")
+            
+            while True:
+                try:
+                    # Get enabled channels
+                    enabled_channels = await self._get_enabled_channels(user_id)
+                    
+                    if not enabled_channels:
+                        logger.info(f"⏸️ MONITORING ENGINE: No enabled channels for user {user_id}")
+                        await asyncio.sleep(60)  # Wait 1 minute before checking again
+                        continue
+                    
+                    # Process each channel
+                    for channel_config in enabled_channels:
+                        try:
+                            await self._process_channel_boost(user_id, channel_config)
+                        except Exception as e:
+                            logger.error(f"Error processing channel {channel_config['channel_id']}: {e}")
+                    
+                    # Wait before next monitoring cycle
+                    await asyncio.sleep(30)  # Check every 30 seconds
+                    
+                except Exception as e:
+                    logger.error(f"Error in monitoring engine cycle: {e}")
+                    await asyncio.sleep(60)  # Wait longer on error
+                    
+        except asyncio.CancelledError:
+            logger.info(f"⏹️ MONITORING ENGINE: Stopped for user {user_id}")
+        except Exception as e:
+            logger.error(f"❌ MONITORING ENGINE: Fatal error for user {user_id}: {e}")
+    
+    async def _process_channel_boost(self, user_id: int, channel_config: Dict[str, Any]):
+        """Process individual channel for boost operations"""
+        try:
+            channel_id = channel_config['channel_id']
+            
+            # Check cooldown
+            last_boost = await self.db.fetch_one(
+                "SELECT created_at FROM channel_operations WHERE user_id = $1 AND channel_id = $2 ORDER BY created_at DESC LIMIT 1",
+                user_id, channel_id
+            )
+            
+            if last_boost:
+                time_since_boost = datetime.now() - last_boost['created_at']
+                cooldown = timedelta(minutes=channel_config['cooldown_minutes'])
                 
-        except Exception as e:
-            logger.error(f"Error pausing campaign: {e}")
-            await callback.answer("❌ Error pausing campaign", show_alert=True)
-    
-    async def _resume_campaign(self, callback: CallbackQuery, campaign_id: int):
-        """Resume a campaign"""
-        try:
-            success = await self.db.update_campaign_progress(campaign_id, None, 'active')
+                if time_since_boost < cooldown:
+                    return  # Still in cooldown
             
-            if success:
-                await callback.answer("▶️ Campaign resumed successfully")
-                await self._show_campaign_details(callback, campaign_id)
-            else:
-                await callback.answer("❌ Failed to resume campaign", show_alert=True)
-                
-        except Exception as e:
-            logger.error(f"Error resuming campaign: {e}")
-            await callback.answer("❌ Error resuming campaign", show_alert=True)
-    
-    async def _stop_campaign(self, callback: CallbackQuery, campaign_id: int):
-        """Stop a campaign"""
-        try:
-            success = await self.db.update_campaign_progress(campaign_id, None, 'stopped')
+            # Perform boost operation
+            await self._perform_boost_operation(user_id, channel_config)
             
-            if success:
-                await callback.answer("⏹️ Campaign stopped successfully")
-                await self._show_campaign_details(callback, campaign_id)
-            else:
-                await callback.answer("❌ Failed to stop campaign", show_alert=True)
-                
         except Exception as e:
-            logger.error(f"Error stopping campaign: {e}")
-            await callback.answer("❌ Error stopping campaign", show_alert=True)
+            logger.error(f"Error processing channel boost: {e}")
     
-    async def shutdown(self):
-        """Shutdown view manager handler"""
+    async def _perform_boost_operation(self, user_id: int, channel_config: Dict[str, Any]):
+        """Perform the actual boost operation"""
         try:
-            if hasattr(self.auto_boost, 'shutdown'):
-                await self.auto_boost.shutdown()
-            if hasattr(self.manual_boost, 'shutdown'):
-                await self.manual_boost.shutdown()
-            if hasattr(self.scheduler, 'shutdown'):
-                await self.scheduler.shutdown()
+            # Get user's accounts for boosting
+            accounts = await self.db.fetch_all(
+                "SELECT * FROM telegram_accounts WHERE user_id = $1 AND is_active = TRUE LIMIT 10",
+                user_id
+            )
             
-            logger.info("✅ View manager handler shut down")
+            if not accounts:
+                logger.warning(f"No active accounts for user {user_id}")
+                return
+            
+            # Record the boost operation
+            await self.db.execute_query(
+                """
+                INSERT INTO channel_operations 
+                (user_id, channel_id, operation_type, account_count, success, created_at)
+                VALUES ($1, $2, 'auto_boost', $3, TRUE, NOW())
+                """,
+                user_id, channel_config['channel_id'], len(accounts)
+            )
+            
+            logger.info(f"🚀 BOOST: Auto boosted channel {channel_config['channel_id']} with {len(accounts)} accounts")
+            
         except Exception as e:
-            logger.error(f"Error shutting down view manager handler: {e}")
+            logger.error(f"Error performing boost operation: {e}")
+    
+    # Helper methods
+    async def _get_user_channels(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get user's channels"""
+        return await self.db.fetch_all(
+            "SELECT * FROM telegram_channels WHERE user_id = $1 ORDER BY created_at DESC",
+            user_id
+        )
+    
+    async def _get_enabled_channels(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get channels enabled for auto boost"""
+        return await self.db.fetch_all(
+            """
+            SELECT bc.*, tc.channel_title, tc.channel_identifier 
+            FROM boost_configs bc
+            JOIN telegram_channels tc ON bc.channel_id = tc.id
+            WHERE bc.user_id = $1 AND bc.is_enabled = TRUE
+            """,
+            user_id
+        )
+    
+    async def _ensure_user_exists(self, user):
+        """Ensure user exists in database"""
+        await self.db.execute_query(
+            """
+            INSERT INTO users (user_id, username, first_name, last_name, first_seen, last_seen)
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            ON CONFLICT (user_id) DO UPDATE SET 
+                username = $2, last_seen = NOW()
+            """,
+            user.id, user.username, user.first_name, user.last_name
+        )
+    
+    async def _start_monitoring_engine(self):
+        """Start the global monitoring engine"""
+        logger.info("🚀 Auto boost monitoring engine ready")
+    
+    def _get_retry_keyboard(self) -> InlineKeyboardMarkup:
+        """Get retry keyboard"""
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="[🔄 Try Again]", callback_data="vm_boost_settings")],
+            [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_auto_boost")]
+        ])

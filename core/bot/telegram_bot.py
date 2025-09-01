@@ -120,10 +120,10 @@ class TelegramBotCore:
                 await self.db.execute_query(
                     """
                     INSERT INTO telegram_accounts 
-                    (id, phone_number, api_id, api_hash, is_verified, is_active, added_date, verification_date)
+                    (id, phone_number, api_id, api_hash, is_verified, is_active, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())
                     ON CONFLICT (id) DO UPDATE SET
-                    is_verified = TRUE, is_active = TRUE, verification_date = NOW()
+                    is_verified = TRUE, is_active = TRUE, updated_at = NOW()
                     """,
                     account_id, me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH
                 )

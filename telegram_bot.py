@@ -137,13 +137,13 @@ class TelegramBot:
             )
             
             # Register callback prefixes with inline handler for proper routing
-            self.inline_handler.register_handler("cm_", self.handlers['channel_management'])
-            self.inline_handler.register_handler("vm_", self.handlers['view_manager']) 
-            self.inline_handler.register_handler("er_", self.handlers['emoji_reactions'])
-            self.inline_handler.register_handler("an_", self.handlers['analytics'])
-            self.inline_handler.register_handler("am_", self.handlers['account_management'])
-            self.inline_handler.register_handler("sh_", self.handlers['system_health'])
-            self.inline_handler.register_handler("lm_", self.handlers['live_management'])
+            self.inline_handler.register_handler("account_manager", self.handlers['account_management'])
+            self.inline_handler.register_handler("channel_manager", self.handlers['channel_management'])
+            self.inline_handler.register_handler("views_manager", self.handlers['view_manager']) 
+            self.inline_handler.register_handler("poll_manager", self.handlers['emoji_reactions'])  # Temporary until poll manager is built
+            self.inline_handler.register_handler("live_manager", self.handlers['live_management'])
+            self.inline_handler.register_handler("analytics", self.handlers['analytics'])
+            self.inline_handler.register_handler("emoji_reaction", self.handlers['emoji_reactions'])
             
             logger.info("✅ All routes registered successfully")
             
@@ -193,26 +193,53 @@ class TelegramBot:
         logger.info(f"👤 USER INTERACTION: User {user_id} (@{username}) sent /help command")
         
         help_text = """
-🤖 <b>Telegram Channel Management Bot</b>
+🔥 <b>ArcX Bot - Help Documentation</b>
 
-<b>📋 Available Features:</b>
-🎯 <b>Channel Management</b> - Add and manage your channels
-🚀 <b>View Boosting</b> - Boost views on posts automatically
-🎭 <b>Emoji Reactions</b> - Add emoji reactions to posts
-📊 <b>Analytics</b> - View detailed statistics
-📱 <b>Account Management</b> - Manage multiple Telegram accounts
-🎙️ <b>Live Management</b> - Join live streams automatically
-👁️ <b>View Monitoring</b> - Monitor view counts in real-time
-💚 <b>System Health</b> - Check bot performance
+<b>📋 Feature Guide:</b>
 
-<b>💡 Getting Started:</b>
-1. Use /start to see the main menu
-2. Add your channels first
-3. Configure your accounts
-4. Start boosting views!
+📱 <b>[Account Manager]</b>
+• Add accounts with default/custom API
+• Remove accounts and session cleanup
+• List accounts with detailed info
+• Refresh account status
 
-<b>🆘 Need Help?</b>
-Contact the bot administrators for assistance.
+📺 <b>[Channel Manager]</b> 
+• Universal link handler for any channel type
+• Add/remove channels from all accounts
+• View channel statistics and member count
+• Generate unique channel IDs for operations
+
+🚀 <b>[Views Manager]</b>
+• Auto Boost: Configure timing, cooldown, view counts
+• Manual Boost: Instant view boosting
+• Advanced scheduling with custom time formats
+• Per-channel configuration settings
+
+🗳️ <b>[Poll Manager]</b>
+• Universal poll link handler
+• Vote with multiple accounts
+• Select voting options and distribution
+• Real-time voting progress tracking
+
+🎙️ <b>[Live Manager]</b>
+• Auto-join live streams and voice chats
+• WebRTC audio streaming (silent audio)
+• Random hand raising and interactions
+• Configurable participation settings
+
+📊 <b>[Analytics]</b>
+• Per-channel performance metrics
+• System health and resource monitoring
+• Engine status tracking
+• Database connection statistics
+
+😀 <b>[Emoji Reaction]</b>
+• React to latest messages automatically
+• Random emoji distribution strategies
+• Custom reaction counts per message
+• Multi-account reaction coordination
+
+<b>👨‍💻 Developer:</b> @damn_itd_ravan
         """
         
         logger.info(f"🤖 BOT RESPONSE: Sending help message to user {user_id}")
@@ -222,63 +249,64 @@ Contact the bot administrators for assistance.
         """Generate welcome message based on user type"""
         if is_admin:
             return f"""
-🎯 <b>Welcome Back, Admin {username}!</b>
+🔥 <b>Welcome to ArcX Bot, {username}!</b>
 
-You have full access to all bot features including:
-• Channel Management & View Boosting
-• Account Management & Live Streaming
-• Analytics & System Health Monitoring
-• Complete Bot Administration
+🚀 <b>Advanced Telegram Channel Management System</b>
 
-Select an option below to get started:
+✨ You have full access to all premium features. 
+If you need help with any feature, use /help for detailed documentation.
+
+Select a feature below:
             """
         else:
             return f"""
-👋 <b>Welcome, {username}!</b>
+🚫 <b>Access Restricted</b>
 
-🚀 <b>Telegram Channel Management Bot</b>
+Hi {username}! This is a premium Telegram channel management bot.
 
-This bot helps you manage your Telegram channels and boost engagement through:
-• Automated view boosting
-• Emoji reactions management
-• Live stream participation
-• Real-time analytics
+🤖 <b>ArcX Bot</b> - Advanced Channel Management
+• Multi-account automation
+• View boosting systems  
+• Live stream management
+• Advanced analytics
 
-Select an option below to get started:
+This bot is for authorized users only.
+
+👨‍💻 Developer: @damn_itd_ravan
             """
     
     def _get_main_keyboard(self, is_admin: bool) -> InlineKeyboardMarkup:
         """Generate main menu keyboard based on user type"""
-        buttons = []
-        
-        # Core features available to all users
-        buttons.append([
-            InlineKeyboardButton(text="🎯 Channel Management", callback_data="channel_management")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="🚀 Boost Views", callback_data="view_manager"),
-            InlineKeyboardButton(text="🎭 Emoji Reactions", callback_data="emoji_reactions")
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="📊 Analytics", callback_data="analytics")
-        ])
-        
-        # Advanced features
-        buttons.append([
-            InlineKeyboardButton(text="📱 Manage Accounts", callback_data="account_management"),
-            InlineKeyboardButton(text="🎙️ Live Management", callback_data="live_management")
-        ])
-        
-        # Admin-only features
-        if is_admin:
-            buttons.append([
-                InlineKeyboardButton(text="💚 System Health", callback_data="system_health")
+        if not is_admin:
+            # Non-admin gets restricted access - only show contact info
+            return InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="👨‍💻 Contact Developer", url="https://t.me/damn_itd_ravan")]
             ])
         
-        # Help and refresh
+        # Admin gets full access with ArcX branded layout
+        buttons = []
+        
+        # First row - Account & Channel management
         buttons.append([
-            InlineKeyboardButton(text="❓ Help", callback_data="help"),
-            InlineKeyboardButton(text="🔄 Refresh", callback_data="refresh_main")
+            InlineKeyboardButton(text="[📱 Account Manager]", callback_data="account_manager"),
+            InlineKeyboardButton(text="[📺 Channel Manager]", callback_data="channel_manager")
+        ])
+        
+        # Second row - Views & Poll management  
+        buttons.append([
+            InlineKeyboardButton(text="[🚀 Views Manager]", callback_data="views_manager"),
+            InlineKeyboardButton(text="[🗳️ Poll Manager]", callback_data="poll_manager")
+        ])
+        
+        # Third row - Live & Analytics
+        buttons.append([
+            InlineKeyboardButton(text="[🎙️ Live Manager]", callback_data="live_manager"),
+            InlineKeyboardButton(text="[📊 Analytics]", callback_data="analytics")
+        ])
+        
+        # Fourth row - Emoji reactions (full width)
+        buttons.append([
+            InlineKeyboardButton(text="[😀 Emoji Reaction]", callback_data="emoji_reaction")
         ])
         
         return InlineKeyboardMarkup(inline_keyboard=buttons)
