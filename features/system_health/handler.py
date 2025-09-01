@@ -45,10 +45,11 @@ class SystemHealthHandler:
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
-        dp.callback_query.register(
-            self.handle_callback,
-            lambda c: c.data.startswith('sh_')
-        )
+        # Callback registration handled by central inline_handler
+        # dp.callback_query.register(
+        #     self.handle_callback,
+        #     lambda c: c.data.startswith('sh_')
+        # )
         
         logger.info("✅ System health handlers registered")
     

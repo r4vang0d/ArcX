@@ -118,17 +118,17 @@ class TelegramBot:
             self.dp.message.register(self._start_command, CommandStart())
             self.dp.message.register(self._help_command, Command("help"))
             
-            # Register inline callback handler
-            self.dp.callback_query.register(
-                self.inline_handler.handle_callback,
-                lambda c: True
-            )
-            
-            # Register feature handlers with dispatcher and inline handler
+            # Register feature handlers with dispatcher (for non-callback handlers like message handlers)
             for handler_name, handler in self.handlers.items():
                 if hasattr(handler, 'register_handlers'):
                     handler.register_handlers(self.dp)
                     logger.info(f"✅ {handler_name} routes registered")
+            
+            # Register inline callback handler AFTER feature handlers to avoid conflicts
+            self.dp.callback_query.register(
+                self.inline_handler.handle_callback,
+                lambda c: True
+            )
             
             # Register callback prefixes with inline handler for proper routing
             self.inline_handler.register_handler("cm_", self.handlers['channel_management'])

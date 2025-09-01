@@ -57,10 +57,11 @@ class ViewManagerHandler:
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
         # Main view manager callbacks
-        dp.callback_query.register(
-            self.handle_callback,
-            lambda c: c.data.startswith('vm_')
-        )
+        # Callback registration handled by central inline_handler
+        # dp.callback_query.register(
+        #     self.handle_callback,
+        #     lambda c: c.data.startswith('vm_')
+        # )
         
         # FSM handlers
         dp.message.register(

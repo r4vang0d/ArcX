@@ -51,10 +51,11 @@ class ChannelManagementHandler:
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
         # Register callback handlers
-        dp.callback_query.register(
-            self.handle_callback,
-            lambda c: c.data.startswith('cm_')
-        )
+        # Callback registration handled by central inline_handler
+        # dp.callback_query.register(
+        #     self.handle_callback,
+        #     lambda c: c.data.startswith('cm_')
+        # )
         
         # Register FSM handlers
         dp.message.register(

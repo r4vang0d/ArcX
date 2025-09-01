@@ -52,10 +52,11 @@ class AccountManagementHandler:
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
-        dp.callback_query.register(
-            self.handle_callback,
-            lambda c: c.data.startswith('am_')
-        )
+        # Callback registration handled by central inline_handler
+        # dp.callback_query.register(
+        #     self.handle_callback,
+        #     lambda c: c.data.startswith('am_')
+        # )
         
         # FSM handlers
         dp.message.register(
