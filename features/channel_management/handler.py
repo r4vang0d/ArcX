@@ -123,16 +123,25 @@ class ChannelManagementHandler:
             text = """
 🎯 <b>Add New Channel</b>
 
-Please provide your channel information. You can use:
+Please provide your channel information. Supported formats:
 
-📝 <b>Channel Username:</b> @channelname
-🔗 <b>Channel Link:</b> https://t.me/channelname
+📝 <b>Username:</b> @channelname or channelname
+🔗 <b>Public Link:</b> https://t.me/channelname
+🔒 <b>Private Invite:</b> https://t.me/joinchat/xxxxx
+🔗 <b>New Private Link:</b> https://t.me/+xxxxx
 🆔 <b>Channel ID:</b> -1001234567890
+🔗 <b>Message Link:</b> https://t.me/c/1234567/123
 
-<b>📋 Requirements:</b>
-• You must be an admin of the channel
-• Channel must be public or you must provide invite link
-• Bot needs permission to read messages
+<b>📋 Channel Types Supported:</b>
+✅ Public channels
+✅ Private channels (with invite link)
+✅ Groups and supergroups
+✅ Broadcast channels
+
+<b>⚠️ Requirements:</b>
+• You must be a member of the channel/group
+• For best functionality, admin access is recommended
+• The bot account must be able to access the channel
 
 Please send your channel information:
             """

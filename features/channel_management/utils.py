@@ -144,26 +144,9 @@ class ChannelValidator:
                         'error': 'Invalid username format'
                     }
             
-            # Telegram URL
-            if 'telegram.me' in channel_input or 't.me' in channel_input:
-                parsed_url = urlparse(channel_input)
-                path = parsed_url.path.strip('/')
-                
-                if path:
-                    # Remove any additional parameters
-                    username = path.split('/')[0]
-                    if self._is_valid_username(username):
-                        return {
-                            'valid': True,
-                            'type': 'username',
-                            'value': username,
-                            'input': channel_input
-                        }
-                
-                return {
-                    'valid': False,
-                    'error': 'Could not extract channel information from URL'
-                }
+            # Telegram URLs - Enhanced parsing for all link types
+            if any(domain in channel_input.lower() for domain in ['telegram.me', 't.me', 'telegram.org']):
+                return self._parse_telegram_url(channel_input)
             
             # Plain username (without @)
             if self._is_valid_username(channel_input):
@@ -176,7 +159,7 @@ class ChannelValidator:
             
             return {
                 'valid': False,
-                'error': 'Invalid channel format. Use @username, channel ID, or t.me link.'
+                'error': 'Invalid channel format. Supported formats:\n• @username\n• https://t.me/username\n• https://t.me/joinchat/xxxxx\n• https://t.me/+xxxxx\n• Channel ID (-100xxxxxxxxx)'
             }
             
         except Exception as e:
@@ -186,16 +169,129 @@ class ChannelValidator:
                 'error': 'Failed to parse channel information'
             }
     
+    def _parse_telegram_url(self, url: str) -> Dict[str, Any]:
+        """Parse various Telegram URL formats"""
+        try:
+            # Clean and normalize URL
+            url = url.strip()
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            parsed_url = urlparse(url)
+            path = parsed_url.path.strip('/')
+            
+            # Handle different URL patterns
+            if 'joinchat' in path:
+                # Private group/channel invite link: t.me/joinchat/xxxxx
+                invite_hash = path.split('joinchat/')[-1]
+                if invite_hash and len(invite_hash) > 10:  # Reasonable hash length
+                    return {
+                        'valid': True,
+                        'type': 'invite_link',
+                        'value': invite_hash,
+                        'input': url,
+                        'full_path': path
+                    }
+                else:
+                    return {
+                        'valid': False,
+                        'error': 'Invalid invite link format'
+                    }
+            
+            elif path.startswith('+'):
+                # New style private invite: t.me/+xxxxx
+                invite_hash = path[1:]  # Remove the + sign
+                if invite_hash and len(invite_hash) > 10:
+                    return {
+                        'valid': True,
+                        'type': 'invite_link',
+                        'value': invite_hash,
+                        'input': url,
+                        'full_path': path
+                    }
+                else:
+                    return {
+                        'valid': False,
+                        'error': 'Invalid private invite link format'
+                    }
+            
+            elif '/c/' in path:
+                # Channel with ID: t.me/c/channel_id/message_id
+                parts = path.split('/c/')
+                if len(parts) > 1:
+                    channel_part = parts[1].split('/')[0]
+                    try:
+                        channel_id = int(channel_part)
+                        # Convert to full channel ID format
+                        full_channel_id = -1000000000000 - channel_id
+                        return {
+                            'valid': True,
+                            'type': 'id',
+                            'value': full_channel_id,
+                            'input': url
+                        }
+                    except ValueError:
+                        return {
+                            'valid': False,
+                            'error': 'Invalid channel ID in URL'
+                        }
+            
+            elif path and not any(x in path for x in ['/', '?', '#']):
+                # Simple username: t.me/username
+                username = path
+                if self._is_valid_username(username):
+                    return {
+                        'valid': True,
+                        'type': 'username',
+                        'value': username,
+                        'input': url
+                    }
+                else:
+                    return {
+                        'valid': False,
+                        'error': 'Invalid username in URL'
+                    }
+            
+            elif '/' in path:
+                # Username with possible message ID: t.me/username/123
+                username = path.split('/')[0]
+                if username and self._is_valid_username(username):
+                    return {
+                        'valid': True,
+                        'type': 'username',
+                        'value': username,
+                        'input': url
+                    }
+                else:
+                    return {
+                        'valid': False,
+                        'error': 'Invalid username in URL'
+                    }
+            
+            return {
+                'valid': False,
+                'error': 'Could not parse Telegram URL format'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing Telegram URL: {e}")
+            return {
+                'valid': False,
+                'error': 'Failed to parse URL'
+            }
+
     def _is_valid_username(self, username: str) -> bool:
         """Check if username format is valid"""
-        # Username rules: 5-32 characters, alphanumeric + underscores, can't start with number
-        if not username or len(username) < 5 or len(username) > 32:
+        # Username rules: 4-32 characters, alphanumeric + underscores, can't start with number
+        # Made more lenient to handle more valid usernames
+        if not username or len(username) < 4 or len(username) > 32:
             return False
         
         if username[0].isdigit():
             return False
         
-        return re.match(r'^[a-zA-Z0-9_]+$', username) is not None
+        # Allow letters, numbers, and underscores
+        return re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', username) is not None
     
     async def _get_channel_entity(self, client: TelegramClient, channel_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get channel entity from Telegram"""
@@ -206,28 +302,44 @@ class ChannelValidator:
                 entity = await client.get_entity(channel_info['value'])
             elif channel_info['type'] == 'username':
                 entity = await client.get_entity(channel_info['value'])
+            elif channel_info['type'] == 'invite_link':
+                # Handle invite links
+                entity = await self._resolve_invite_link(client, channel_info['value'])
             
             if not entity:
                 return None
             
-            # Check if it's a channel
+            # Check if it's a channel or group
             if not isinstance(entity, (types.Channel, types.Chat)):
                 return None
             
             # Get additional channel information
-            full_channel = await client(functions.channels.GetFullChannelRequest(entity))
+            try:
+                if isinstance(entity, types.Channel):
+                    full_channel = await client(functions.channels.GetFullChannelRequest(entity))
+                    full_chat = full_channel.full_chat
+                else:
+                    # For regular chats
+                    full_chat_request = functions.messages.GetFullChatRequest(entity.id)
+                    full_chat_result = await client(full_chat_request)
+                    full_chat = full_chat_result.full_chat
+            except Exception as e:
+                logger.warning(f"Could not get full channel info: {e}")
+                # Fallback to basic info
+                full_chat = None
             
             return {
                 'channel_id': entity.id,
                 'access_hash': getattr(entity, 'access_hash', None),
                 'title': entity.title,
                 'username': getattr(entity, 'username', None),
-                'description': getattr(full_channel.full_chat, 'about', ''),
-                'member_count': getattr(full_channel.full_chat, 'participants_count', 0),
+                'description': getattr(full_chat, 'about', '') if full_chat else '',
+                'member_count': getattr(full_chat, 'participants_count', 0) if full_chat else 0,
                 'is_megagroup': getattr(entity, 'megagroup', False),
                 'is_broadcast': getattr(entity, 'broadcast', False),
                 'is_public': bool(getattr(entity, 'username', None)),
-                'created_date': getattr(entity, 'date', None)
+                'created_date': getattr(entity, 'date', None),
+                'is_private': channel_info['type'] == 'invite_link'
             }
             
         except ChannelPrivateError:
@@ -238,6 +350,34 @@ class ChannelValidator:
             return None
         except Exception as e:
             logger.error(f"Error getting channel entity: {e}")
+            return None
+
+    async def _resolve_invite_link(self, client: TelegramClient, invite_hash: str) -> Optional[types.Channel]:
+        """Resolve invite link to get channel entity"""
+        try:
+            # First, try to check the invite without joining
+            invite_info = await client(functions.messages.CheckChatInviteRequest(invite_hash))
+            
+            if hasattr(invite_info, 'chat'):
+                # We can see the chat info without joining
+                return invite_info.chat
+            elif hasattr(invite_info, 'channel'):
+                # We can see the channel info without joining
+                return invite_info.channel
+            else:
+                # We need to join to access the channel
+                logger.info("Attempting to join channel via invite link...")
+                result = await client(functions.messages.ImportChatInviteRequest(invite_hash))
+                
+                if hasattr(result, 'chats') and result.chats:
+                    return result.chats[0]
+                elif hasattr(result, 'chat'):
+                    return result.chat
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error resolving invite link: {e}")
             return None
     
     async def _check_user_permissions(self, account: Dict[str, Any], 
