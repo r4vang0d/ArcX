@@ -50,32 +50,46 @@ class ChannelValidator:
             # Try to resolve channel with user's accounts
             channel_data = None
             successful_account = None
+            validation_errors = []
             
             for account in user_accounts:
                 try:
                     client = await self.bot_core.get_client(account['id'])
                     if not client:
+                        validation_errors.append(f"Account {account.get('phone_number', account['id'])}: Not connected")
                         continue
                     
                     # Check rate limits
                     if not await self.bot_core.check_rate_limit(account['id']):
+                        validation_errors.append(f"Account {account.get('phone_number', account['id'])}: Rate limited")
                         continue
                     
                     # Try to get channel entity
-                    channel_data = await self._get_channel_entity(client, channel_info)
-                    if channel_data:
+                    result = await self._get_channel_entity_with_details(client, channel_info, account)
+                    if result['success']:
+                        channel_data = result['data']
                         successful_account = account
                         await self.bot_core.increment_rate_limit(account['id'])
                         break
+                    else:
+                        validation_errors.append(f"Account {account.get('phone_number', account['id'])}: {result['error']}")
                         
                 except Exception as e:
+                    error_msg = f"Account {account.get('phone_number', account['id'])}: {str(e)}"
+                    validation_errors.append(error_msg)
                     logger.warning(f"Failed to check channel with account {account['id']}: {e}")
                     continue
             
             if not channel_data:
+                # Provide detailed error information
+                error_details = "\n".join(validation_errors) if validation_errors else "No accounts could access the channel"
+                
+                # Check if channel exists at all
+                channel_status = await self._check_channel_existence(channel_info)
+                
                 return {
                     'success': False,
-                    'error': 'Could not access the channel. Please check the channel link and your permissions.'
+                    'error': f"Could not access channel '{channel_input}'.\n\n🔍 **Validation Details:**\n{error_details}\n\n{channel_status['message']}"
                 }
             
             # Validate user permissions
@@ -293,6 +307,100 @@ class ChannelValidator:
         # Allow letters, numbers, and underscores
         return re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', username) is not None
     
+    async def _get_channel_entity_with_details(self, client: TelegramClient, channel_info: Dict[str, Any], account: Dict[str, Any]) -> Dict[str, Any]:
+        """Get channel entity with detailed error reporting"""
+        try:
+            entity = None
+            
+            if channel_info['type'] == 'id':
+                entity = await client.get_entity(channel_info['value'])
+            elif channel_info['type'] == 'username':
+                # Try both with and without @ symbol
+                username = channel_info['value']
+                try:
+                    entity = await client.get_entity(username)
+                except Exception:
+                    # Try with @ prefix if not already there
+                    if not username.startswith('@'):
+                        entity = await client.get_entity('@' + username)
+                    else:
+                        raise
+            elif channel_info['type'] == 'invite_link':
+                entity = await self._resolve_invite_link(client, channel_info['value'])
+            
+            if not entity:
+                return {
+                    'success': False,
+                    'error': 'Channel not found or invalid'
+                }
+            
+            # Check if it's a channel or group
+            if not isinstance(entity, (types.Channel, types.Chat)):
+                return {
+                    'success': False,
+                    'error': f'This is a {type(entity).__name__}, not a channel or group'
+                }
+            
+            # Get additional channel information
+            try:
+                if isinstance(entity, types.Channel):
+                    full_channel = await client(functions.channels.GetFullChannelRequest(entity))
+                    full_chat = full_channel.full_chat
+                else:
+                    # For regular chats
+                    full_chat_request = functions.messages.GetFullChatRequest(entity.id)
+                    full_chat_result = await client(full_chat_request)
+                    full_chat = full_chat_result.full_chat
+            except Exception as e:
+                logger.warning(f"Could not get full channel info: {e}")
+                full_chat = None
+            
+            channel_data = {
+                'channel_id': entity.id,
+                'access_hash': getattr(entity, 'access_hash', None),
+                'title': entity.title,
+                'username': getattr(entity, 'username', None),
+                'description': getattr(full_chat, 'about', '') if full_chat else '',
+                'member_count': getattr(full_chat, 'participants_count', 0) if full_chat else 0,
+                'is_megagroup': getattr(entity, 'megagroup', False),
+                'is_broadcast': getattr(entity, 'broadcast', False),
+                'is_public': bool(getattr(entity, 'username', None)),
+                'created_date': getattr(entity, 'date', None),
+                'is_private': channel_info['type'] == 'invite_link'
+            }
+            
+            return {
+                'success': True,
+                'data': channel_data
+            }
+            
+        except ChannelPrivateError:
+            return {
+                'success': False,
+                'error': 'Channel is private and you are not a member'
+            }
+        except FloodWaitError as e:
+            return {
+                'success': False,
+                'error': f'Rate limited, wait {e.seconds} seconds'
+            }
+        except ValueError as e:
+            if 'username' in str(e).lower():
+                return {
+                    'success': False,
+                    'error': 'Username not found or invalid'
+                }
+            return {
+                'success': False,
+                'error': f'Invalid format: {str(e)}'
+            }
+        except Exception as e:
+            error_type = type(e).__name__
+            return {
+                'success': False,
+                'error': f'{error_type}: {str(e)}'
+            }
+    
     async def _get_channel_entity(self, client: TelegramClient, channel_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get channel entity from Telegram"""
         try:
@@ -351,6 +459,31 @@ class ChannelValidator:
         except Exception as e:
             logger.error(f"Error getting channel entity: {e}")
             return None
+    
+    async def _check_channel_existence(self, channel_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Check if channel exists using public methods"""
+        try:
+            if channel_info['type'] == 'username':
+                username = channel_info['value']
+                return {
+                    'exists': 'unknown',
+                    'message': f"💡 **Troubleshooting Tips:**\n• Make sure '@{username}' is spelled correctly\n• Check if the channel is public (has a username)\n• Verify your accounts are active and connected\n• Try adding the channel using its invite link instead"
+                }
+            elif channel_info['type'] == 'invite_link':
+                return {
+                    'exists': 'unknown', 
+                    'message': f"💡 **For Private Channels:**\n• Make sure the invite link is valid and not expired\n• Your account needs to join the channel first\n• Some private channels restrict access"
+                }
+            else:
+                return {
+                    'exists': 'unknown',
+                    'message': f"💡 **Channel ID Issues:**\n• Verify the channel ID format is correct\n• Channel might be deleted or restricted\n• Your accounts may not have access"
+                }
+        except Exception as e:
+            return {
+                'exists': 'unknown',
+                'message': f"💡 **General Tips:**\n• Try refreshing your account connections\n• Make sure the channel exists and is accessible\n• Contact channel admin if it's a private channel"
+            }
 
     async def _resolve_invite_link(self, client: TelegramClient, invite_hash: str) -> Optional[types.Channel]:
         """Resolve invite link to get channel entity"""
