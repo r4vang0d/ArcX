@@ -1,0 +1,89 @@
+So the bot which u we have created this whole project is basically kinda broken so I will reexplain to you about each feature and let's try to fix that out
+First list of features
+ List of features 
+1. Account Manager 
+2. Channel Manager 
+3. Views Manager 
+4. Poll Manager 
+5. Live Manager
+6. Analytics
+7. Emoji reaction 
+Only these should be the inline buttons on the main menu when we start the bot using /start
+When first time a user start the bot they should get a Welcome Message where also mention if u want help use /help to get the help docs inside that mention the docs about each feature and there uses tips and all so that we don't have to integrate that in the ui 
+Ui buttons ui and layouts 
+Ui should be futuristic with ArcX branding in all panels even in everything and the buttons with [] these brackets so it can look cool minimal texts not unnecessary tips or about coz we have already added them to /help
+Features
+1. Account Manager
+In here all the account management will be happen when user click account manager the new menu will come up in there , there will be add account remove account list account refresh accounts and a back button and a directly main menu button 
+a) add account- when a user press this button account adding function should start first bot should ask the user to either choose default api ( which is inside .env folder in the bot ) or custom api if user chooses default api bot will directly use the default api from .env folder and ask for the number when user enters the number in the bot then it will send the code to that number using the default api then ask for the code once enter the code bot will validate it and once confirmed and if there is no 2fa pass nedded or anything it will save it to database now if user choose custom api then bot will ask for api key then api hash set them and then ask for number and rest will be same as the first one 
+b) remove account- this will remove account from the database and evewhere from the bot even delete the session file 
+c)list account- this will list the saved accounts in the database not with number but with username of the accounts and in front of every account there will be a I button  when pressing that it will show account status account health account id account username account added date and time in a pop up notification window 
+d) refresh accounts- this will refresh the menu or ui simply and get the exact refreshed data 
+ 
+Rest is back button and menu button 
+
+Points to be noted 
+Like add account or remove account once the account is added come back to account manager or removed come back to account manager for each account create a unique id that we will use to call that account in our whole bot that code will be used to call the real account don't strat using that code as a real account for the database always use telethon_db postegresql for connecting that will use data.env cardinates will explain database in detail  later on 
+
+2. Channel Manager -
+This will be used to manager channels in the bot when user press it , it will open new menu and inside that there will be add channel remove channel list channel refresh channel back button and main menu 
+a) add channel - this will add the channels to database using all the present account in the databse with the user of universal link handler any type of link could be handled like presnal channel links with + in the start of normal telegram channel links any type of telegram channel links , so now when user will click add channel bot will ask the user to paste the link or username of the channel or anything don't ask will just ask like pls type or paste the link simple but better ui and all then when the user will put the link bot will add the channel from all the accounts and save it in tha postegresql database as mentioned before telethon_db from data.env 
+b)remove channel- it will remove the channel from all the accounts and from database anywhere , where the channel is being used remove from all of them database and all accounts
+c)list channels - this will show all the channels the user have added and a I button in front of each channel to show channel staics number of members time when affed  channel id 
+
+And rest is back button and main menu like mentioned befors
+
+
+Points to be noted 
+
+As we have already generated to call acconts from account manager so when adding or removing channel it will use that unique id to trigger or use all the accounts to add or remove same like that genrate a unique code for these links also and in I button show that this will make the usecase more better calling function more stable and after doing removing list always go back to channel Manager directly 
+
+3. Views Manager- this will the start of real features this bot has this will setup the views boost when user click this this will open auto Boost Manual Boost back button and main menu button how it actually work will it will use all the account to increase views of channels will call the accounts with unique id and channels too
+a) Auto Boost- when users select this it will open new menu where there will be start boost button stop boost button select channels  back button main menu button
+¹) select channels button when users clicks this list all the accounts peresnnt in the database and in front of each channel add a settings icon and when clicking that settings icon it will open a config menu in the ui show the config settings channel disabled or enabled cooldown time number of views selected time of views number of messages to  fatch 
+Also add buttons for every config 
+Disabled enabled button in one button like user click enable it will enbald and show disable in the same button when user click that again it will disable but update in ui that it is enabled or not 
+Cooldown time - time the bot will wait till fatching the next message of the channel
+number of views - select the number of views either by button or custom ammount(number of accounts = to number of views)
+selected time to view = like a user selected 1h to system will break numebr of account in 1h and then views like I have 6 accounts present so system will use all that account in a way that it should take 1 hr to increase 6 views  like 10minute for each let user either select some preset times or type custom amount 
+Number of messages to fatch let user select number of messages to fatch like last 5 message of channel last 3 message of channel like this here also either presented or custom 
+( Now here how the time system will work like someone want 1 hour 10 minutes 20 second so they will type 1h 2m 20s 
+Also add a + button in left and minus button in left like selected time is 1h but they want to i  increase so + button will incfase 1m and minus will decrse 1m and below that add same but for hour 
+For calling channels and accounts use unique ids earlier created 
+So like this for each channel they can setup diffrent configs for each channel and then
+²) start boost this will start  auto monetaring  engine only for enabled channels in the selected channels this will start monetaring and according to settings when new message in that perticular channel will come it will use the selected ammount of accounts and time and cooldown and all to increase the views 
+³) stop boost will stop the monetaring engine 
+( Points to be noted this will need a very advance asynchronous system so create it in best possible ways so a deep research on this asynchronous system then implant this ) 
+
+4)poll Manager - when clicking this , this will ask the link of the poll once pasted will validate the pole genarte a button for each option in the poll and then user will choose the button which one to vote then it will ask for  the number of votes in ui show max votes = number of accounts user will type the number then the bot will start the vote and using all the accounts it will vote in the pole selected one 
+
+5) Live Manager-
+In this when user click this it will show start monetaring and stop monetaring button and a selected channels button back button and main menu button
+A) selected channels will show the channels presnet in the database from channel list will call them by unique id in front of each channel show a settings icon button when clicking that it will open a config panel in there user can setup config for each channel in that panel there will be enable disabed as before and show in the ui cooldown time for how much it will be in the call can select no limit here so it will not quit untill the channel owner stops the stream just this diffrent config for each channel
+a) start monetaring - for starting the live monetaring engine this will keep checking the channel and once the channel starts a lives it will use the number of accounts selected in the config to join the channel 
+C) stop monetaring will stop this and quit any ongoing call
+(How this is gonna work so the accounts will join the call using telethon built in attribute funtion to join the call then genarte a webrtic using pytgcalls and keep sending a no sound audio for not disconnecting or time selected in config) Create a unique webrtic for each account and when the accounts will join the call successfully all the selected account then it will raise hands to speak one by one randomly if accepted will mute unmute randomly if not accepted then just keep sending raise hands randomly 
+
+6)emoji reaction - will show the channels from the list and ask for the number of messages to react in either last 1 message 2 message or any custom number and no of reactions per message again number of reactions= number of account here make it randomly either same reaction by all accounts of 50/50 50/30 or split in random 3 emojis 
+
+7) analytics will show per channel data how much views increased how many live joined how many time there in live how many emojis reacted how many polls filled and with how many accounts from how much time the bot is running system information cpu usage bot average speed health all engines health which engine is running and which is not connected database 
+
+#Database
+Our bot will use ppstgresql external database from data.env there is everything our bot will use to connect the database 
+Then create scema and tables in the database and everytime a feature is connecting to it make sure it's connecting to telethon_db if not try again or connect anyhow 
+CRRATE colums for all our nedded features 
+
+
+Some universal files 
+universal link handleers database managers and all
+
+
+Bot handler- so for using 1000 of accounts I want the bot to only load 100 at a time and use them after they are used load another 100 like this but keep the data which is being used or which not but in data alayws show total number of accounts parents in the sessions of database 
+
+Ude the unique ids to call accounts and channels 
+
+Now in this project don't conflict anything if anything is already there and u need to update it either update it if possible or delete the old file and cratte new one but don't duplicate 
+Back and main menu button should be everywhere possible
+Make sure all the button get there handles and attributes
+
+Also for non admins when they do /start show them like restricted or something then show bot details only once then never I mean only features and at the end mention developer @damn_itd_ravan
