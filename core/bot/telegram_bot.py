@@ -52,6 +52,9 @@ class TelegramBotCore:
     async def _load_existing_sessions(self):
         """Load existing Telegram sessions"""
         try:
+            # First, check for orphaned session files and recover them
+            await self._recover_orphaned_sessions()
+            
             # Get all verified accounts from database
             accounts = await self.db.fetch_all(
                 "SELECT * FROM telegram_accounts WHERE is_verified = TRUE AND is_active = TRUE"
@@ -70,6 +73,67 @@ class TelegramBotCore:
             
         except Exception as e:
             logger.error(f"Error loading existing sessions: {e}")
+    
+    async def _recover_orphaned_sessions(self):
+        """Recover session files that exist but aren't in the database"""
+        try:
+            import glob
+            session_files = glob.glob("sessions/account_*.session")
+            
+            for session_file in session_files:
+                try:
+                    # Extract account ID from filename
+                    account_id = int(session_file.split('account_')[1].split('.session')[0])
+                    
+                    # Check if account exists in database
+                    existing = await self.db.fetch_one(
+                        "SELECT id FROM telegram_accounts WHERE id = $1", account_id
+                    )
+                    
+                    if not existing:
+                        # Session file exists but no database record - recover it
+                        await self._recover_session_from_file(account_id, session_file)
+                        
+                except Exception as e:
+                    logger.error(f"Error checking session file {session_file}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error recovering orphaned sessions: {e}")
+    
+    async def _recover_session_from_file(self, account_id: int, session_file: str):
+        """Recover account data from existing session file"""
+        try:
+            # Try to connect with the session file to get account info
+            temp_client = TelegramClient(
+                session_file.replace('.session', ''),
+                self.config.TELEGRAM_API_ID,
+                self.config.TELEGRAM_API_HASH
+            )
+            
+            await temp_client.connect()
+            
+            if await temp_client.is_user_authorized():
+                # Get user info from the session
+                me = await temp_client.get_me()
+                
+                # Re-add the account to the database
+                await self.db.execute_query(
+                    """
+                    INSERT INTO telegram_accounts 
+                    (id, phone_number, api_id, api_hash, is_verified, is_active, added_date, verification_date)
+                    VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())
+                    ON CONFLICT (id) DO UPDATE SET
+                    is_verified = TRUE, is_active = TRUE, verification_date = NOW()
+                    """,
+                    account_id, me.phone, self.config.TELEGRAM_API_ID, self.config.TELEGRAM_API_HASH
+                )
+                
+                logger.info(f"🔄 RECOVERED: Session for account {me.phone} (ID: {account_id})")
+                
+            await temp_client.disconnect()
+            
+        except Exception as e:
+            logger.error(f"Failed to recover session from {session_file}: {e}")
     
     async def _create_client_session(self, account: Dict[str, Any]) -> bool:
         """Create Telegram client session for account"""
