@@ -106,8 +106,8 @@ class TelegramBotCore:
             # Try to connect with the session file to get account info
             temp_client = TelegramClient(
                 session_file.replace('.session', ''),
-                self.config.TELEGRAM_API_ID,
-                self.config.TELEGRAM_API_HASH
+                self.config.DEFAULT_API_ID,
+                self.config.DEFAULT_API_HASH
             )
             
             await temp_client.connect()
@@ -125,7 +125,7 @@ class TelegramBotCore:
                     ON CONFLICT (id) DO UPDATE SET
                     is_verified = TRUE, is_active = TRUE, verification_date = NOW()
                     """,
-                    account_id, me.phone, self.config.TELEGRAM_API_ID, self.config.TELEGRAM_API_HASH
+                    account_id, me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH
                 )
                 
                 logger.info(f"🔄 RECOVERED: Session for account {me.phone} (ID: {account_id})")
