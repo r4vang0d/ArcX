@@ -1,0 +1,86 @@
+[project]
+name = "telegram-channel-management-bot"
+version = "1.0.0"
+description = "Comprehensive Telegram Channel Management Bot with view boosting and live stream features"
+authors = [{name = "Channel Bot Team", email = "admin@channelbot.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "aiogram>=3.22.0", # Telegram Bot Framework
+    "telethon>=1.40.0", # Telegram Client Library
+    "psycopg2-binary>=2.9.10", # PostgreSQL Database Adapter
+    "python-dotenv>=1.1.1", # Environment Variables
+    "psutil>=7.0.0", # System Monitoring
+    "pytz>=2025.2", # Timezone Handling
+    "py-tgcalls>=2.2.6", # Voice Call Handling (for audio loops)
+    "asyncpg>=0.29.0", # Async PostgreSQL driver
+    "aiofiles>=24.1.0", # Async file operations
+    "cryptography>=42.0.0", # Cryptographic operations
+    "pydantic>=2.5.0", # Data validation
+    "httpx>=0.26.0", # HTTP client for API calls
+    "features>=0.5.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["*"]
+exclude = ["tests*", "docs*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--disable-warnings",
+    "-v"
+]
+asyncio_mode = "auto"
