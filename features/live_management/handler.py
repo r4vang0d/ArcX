@@ -35,6 +35,10 @@ class LiveManagementHandler:
         self.keyboards = LiveManagementKeyboards()
         self.utils = LiveStreamUtils(bot, db_manager, config)
         
+        # Initialize joiner components as placeholders for now
+        self.auto_joiner = None
+        self.manual_joiner = None
+        
         self._monitoring_task: Optional[asyncio.Task] = None
         self._running = False
         
@@ -42,6 +46,8 @@ class LiveManagementHandler:
         """Initialize live management handler"""
         try:
             await self.bot_core.initialize()
+            # Wait for database schema to be ready before starting monitoring
+            await asyncio.sleep(15)
             await self._start_live_monitoring()
             self._running = True
             logger.info("✅ Live management handler initialized")
@@ -56,9 +62,11 @@ class LiveManagementHandler:
             lambda c: c.data.startswith('lm_')
         )
         
-        # Register sub-handlers
-        self.auto_joiner.register_handlers(dp)
-        self.manual_joiner.register_handlers(dp)
+        # Register sub-handlers when available
+        if hasattr(self.auto_joiner, 'register_handlers'):
+            self.auto_joiner.register_handlers(dp)
+        if hasattr(self.manual_joiner, 'register_handlers'):
+            self.manual_joiner.register_handlers(dp)
         
         logger.info("✅ Live management handlers registered")
     
@@ -343,7 +351,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                     SELECT c.*, u.settings
                     FROM channels c
                     JOIN users u ON c.user_id = u.user_id
-                    WHERE c.is_active = TRUE
+                    WHERE c.is_active = TRUE AND u.is_active = TRUE
                     """
                 )
                 
@@ -443,8 +451,9 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 live_settings
             )
             
-            # Trigger auto-join
-            await self.auto_joiner.join_stream(stream_id, accounts)
+            # Trigger auto-join when available
+            if hasattr(self.auto_joiner, 'join_stream'):
+                await self.auto_joiner.join_stream(stream_id, accounts)
             
             logger.info(f"✅ Detected and processing live stream in {channel['title']}")
             
@@ -470,7 +479,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 FROM live_stream_participants lsp
                 JOIN live_streams ls ON lsp.stream_id = ls.id
                 JOIN channels c ON ls.channel_id = c.id
-                WHERE c.user_id = $1 AND lsp.joined_at >= DATE(NOW())
+                WHERE u.user_id = $1 AND lsp.joined_at >= DATE(NOW())
                 """,
                 user_id
             )
@@ -502,7 +511,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 SELECT ls.*, c.title as channel_title, c.username as channel_username
                 FROM live_streams ls
                 JOIN channels c ON ls.channel_id = c.id
-                WHERE c.user_id = $1 AND ls.is_active = TRUE
+                WHERE u.user_id = $1 AND ls.is_active = TRUE
                 ORDER BY ls.start_time DESC
                 """,
                 user_id
@@ -542,7 +551,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 FROM live_streams ls
                 JOIN channels c ON ls.channel_id = c.id
                 LEFT JOIN live_stream_participants lsp ON ls.id = lsp.stream_id
-                WHERE c.user_id = $1 AND ls.start_time >= DATE(NOW())
+                WHERE u.user_id = $1 AND ls.start_time >= DATE(NOW())
                 """,
                 user_id
             )

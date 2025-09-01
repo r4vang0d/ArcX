@@ -506,7 +506,7 @@ class AnalyticsHandler:
                 SELECT COALESCE(SUM(current_views), 0) as total
                 FROM view_boost_campaigns vbc
                 JOIN channels c ON vbc.channel_id = c.id
-                WHERE c.user_id = $1
+                WHERE vbc.user_id = $1
                 """,
                 user_id
             )

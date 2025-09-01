@@ -432,7 +432,7 @@ class DatabaseManager:
             # Get table statistics
             table_stats = await self.fetch_all(
                 """
-                SELECT schemaname, tablename, n_tup_ins, n_tup_upd, n_tup_del 
+                SELECT schemaname, relname as tablename, n_tup_ins, n_tup_upd, n_tup_del 
                 FROM pg_stat_user_tables 
                 WHERE schemaname = 'public'
                 """

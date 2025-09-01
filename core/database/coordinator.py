@@ -33,6 +33,11 @@ class DatabaseCoordinator:
         """Initialize database connection pool"""
         try:
             logger.info("🔗 Initializing database connection pool...")
+            logger.info(f"📍 Connecting to external database:")
+            logger.info(f"   Host: {self.config.DB_HOST}")
+            logger.info(f"   Port: {self.config.DB_PORT}")
+            logger.info(f"   Database: {self.config.DB_NAME}")
+            logger.info(f"   User: {self.config.DB_USER}")
             
             # Create connection pool
             self.pool = await asyncpg.create_pool(
@@ -51,12 +56,15 @@ class DatabaseCoordinator:
             )
             
             # Test connection
+            logger.info("🔍 Testing database connection...")
             await self._test_connection()
             
             # Initialize database schema
+            logger.info("🛠️ Initializing database schema...")
             await self._initialize_schema()
             
             # Start health monitoring
+            logger.info("💓 Starting health monitoring...")
             self._start_health_monitoring()
             
             logger.info("✅ Database coordinator initialized successfully")
@@ -72,15 +80,56 @@ class DatabaseCoordinator:
                 result = await conn.fetchval("SELECT 1")
                 if result == 1:
                     logger.info("✅ Database connection test successful")
+                    # Also test which database we're connected to
+                    db_name = await conn.fetchval("SELECT current_database()")
+                    logger.info(f"✅ Connected to database: {db_name}")
                 else:
                     raise Exception("Database connection test failed")
         except Exception as e:
             logger.error(f"❌ Database connection test failed: {e}")
             raise
     
+    async def _clear_existing_schema(self):
+        """Clear existing schema (tables and indexes)"""
+        try:
+            logger.info("🗑️ Clearing existing database schema...")
+            
+            async with self.pool.acquire() as conn:
+                # Drop tables in reverse dependency order
+                drop_queries = [
+                    "DROP TABLE IF EXISTS system_logs CASCADE",
+                    "DROP TABLE IF EXISTS analytics_data CASCADE", 
+                    "DROP TABLE IF EXISTS emoji_reactions CASCADE",
+                    "DROP TABLE IF EXISTS live_stream_participants CASCADE",
+                    "DROP TABLE IF EXISTS view_boost_campaigns CASCADE",
+                    "DROP TABLE IF EXISTS channels CASCADE",
+                    "DROP TABLE IF EXISTS telegram_accounts CASCADE",
+                    "DROP TABLE IF EXISTS users CASCADE"
+                ]
+                
+                for query in drop_queries:
+                    await conn.execute(query)
+                    logger.info(f"🗑️ Dropped table: {query.split()[4]}")
+                
+                logger.info("✅ Existing schema cleared successfully")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to clear existing schema: {e}")
+            raise
+
     async def _initialize_schema(self):
         """Initialize database schema"""
         try:
+            logger.info("🔧 Starting database schema initialization...")
+            
+            # First check if we can access the database
+            async with self.pool.acquire() as conn:
+                db_name = await conn.fetchval("SELECT current_database()")
+                logger.info(f"📋 Creating schema in database: {db_name}")
+            
+            # Clear existing schema first
+            await self._clear_existing_schema()
+            
             schema_queries = [
                 # Users table
                 """
@@ -260,10 +309,16 @@ class DatabaseCoordinator:
             ]
             
             async with self.pool.acquire() as conn:
-                for query in schema_queries:
-                    await conn.execute(query)
+                for i, query in enumerate(schema_queries):
+                    try:
+                        await conn.execute(query)
+                        logger.info(f"✅ Created schema component {i+1}/{len(schema_queries)}")
+                    except Exception as query_error:
+                        logger.error(f"❌ Failed to create schema component {i+1}: {query_error}")
+                        logger.error(f"Query: {query[:100]}...")
+                        raise
             
-            logger.info("✅ Database schema initialized")
+            logger.info("✅ Database schema initialized completely")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize database schema: {e}")

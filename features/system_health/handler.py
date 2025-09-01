@@ -556,7 +556,7 @@ class SystemHealthHandler:
                 """
                 SELECT 
                     schemaname,
-                    tablename,
+                    relname as tablename,
                     n_tup_ins + n_tup_upd + n_tup_del as total_ops,
                     n_tup_ins as inserts,
                     n_tup_upd as updates,

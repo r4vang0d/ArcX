@@ -28,6 +28,9 @@ class BoostScheduler:
     async def initialize(self):
         """Initialize boost scheduler"""
         try:
+            # Wait for database schema to be ready
+            await asyncio.sleep(12)
+            
             # Load existing scheduled campaigns
             await self._load_scheduled_campaigns()
             

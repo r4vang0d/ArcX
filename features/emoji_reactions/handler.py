@@ -47,6 +47,8 @@ class EmojiReactionsHandler:
         """Initialize emoji reactions handler"""
         try:
             await self.bot_core.initialize()
+            # Wait for database schema to be ready before starting workers  
+            await asyncio.sleep(20)
             await self._start_reaction_workers()
             self._running = True
             logger.info("✅ Emoji reactions handler initialized")
@@ -421,10 +423,10 @@ Select how to use this emoji set:
                 # Get channels with active reactions
                 active_channels = await self.db.fetch_all(
                     """
-                    SELECT DISTINCT c.id, c.channel_id, c.user_id, c.title
+                    SELECT DISTINCT c.id, er.channel_id, er.user_id, c.title
                     FROM channels c
                     JOIN emoji_reactions er ON c.id = er.channel_id
-                    WHERE er.auto_react_enabled = TRUE AND c.is_active = TRUE
+                    WHERE er.auto_react_enabled = TRUE
                     """
                 )
                 
@@ -590,7 +592,7 @@ Select how to use this emoji set:
                 SELECT COUNT(DISTINCT c.id) as count
                 FROM channels c
                 JOIN emoji_reactions er ON c.id = er.channel_id
-                WHERE c.user_id = $1 AND er.auto_react_enabled = TRUE
+                WHERE er.user_id = $1 AND er.auto_react_enabled = TRUE
                 """,
                 user_id
             )

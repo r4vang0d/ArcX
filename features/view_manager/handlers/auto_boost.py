@@ -36,6 +36,8 @@ class AutoBoostHandler:
         """Initialize auto boost handler"""
         try:
             await self.bot_core.initialize()
+            # Wait for database schema to be ready before starting monitoring
+            await asyncio.sleep(10)
             await self._start_monitoring()
             self._running = True
             logger.info("✅ Auto boost handler initialized")
@@ -292,7 +294,7 @@ Select channels to enable auto boosting:
                 # Get active auto campaigns
                 active_campaigns = await self.db.fetch_all(
                     """
-                    SELECT vbc.*, c.channel_id, c.user_id
+                    SELECT vbc.*, vbc.channel_id as telegram_channel_id, vbc.user_id
                     FROM view_boost_campaigns vbc
                     JOIN channels c ON vbc.channel_id = c.id
                     WHERE vbc.campaign_type = 'auto' AND vbc.status = 'active'
