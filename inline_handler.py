@@ -35,35 +35,41 @@ class InlineHandler:
         try:
             callback_data = callback.data
             user_id = callback.from_user.id
+            username = callback.from_user.username or "Unknown"
             
-            logger.info(f"Received callback: {callback_data} from user {user_id}")
+            # Enhanced logging with user details
+            logger.info(f"🔘 BUTTON PRESSED: User {user_id} (@{username}) clicked '{callback_data}'")
             
             # Handle main menu callbacks
             if callback_data in self._get_main_menu_callbacks():
+                logger.info(f"🏠 MAIN MENU: Routing '{callback_data}' to main menu handler")
                 await self._handle_main_menu_callback(callback)
                 return
             
             # Route to specific handlers based on prefix
             for prefix, handler in self.handlers.items():
                 if callback_data.startswith(prefix):
+                    logger.info(f"🔄 ROUTING: Callback '{callback_data}' routed to '{prefix}' handler")
                     if hasattr(handler, 'handle_callback'):
                         await handler.handle_callback(callback, state)
                         return
             
             # Handle unknown callbacks
+            logger.warning(f"❓ UNKNOWN CALLBACK: '{callback_data}' from user {user_id}")
             await self._handle_unknown_callback(callback)
             
         except Exception as e:
-            logger.error(f"Error handling callback {callback.data}: {e}")
+            logger.error(f"❌ CALLBACK ERROR: Error handling callback '{callback.data}' from user {callback.from_user.id}: {e}")
             try:
                 # Check if it's a timeout error and handle gracefully
                 if "query is too old" in str(e) or "timeout expired" in str(e):
-                    logger.info("Ignoring expired callback query")
+                    logger.info("⏰ EXPIRED CALLBACK: Ignoring expired callback query")
                     return
+                logger.info(f"🤖 ERROR RESPONSE: Sending error message to user {callback.from_user.id}")
                 await callback.answer("❌ An error occurred. Please try again.", show_alert=True)
             except Exception as answer_error:
                 # If we can't answer the callback (e.g., expired), just log it
-                logger.info(f"Could not answer callback (likely expired): {answer_error}")
+                logger.info(f"⚠️ CALLBACK ANSWER FAILED: Could not answer callback (likely expired): {answer_error}")
     
     def _get_main_menu_callbacks(self) -> set:
         """Get set of main menu callback data"""
@@ -78,45 +84,61 @@ class InlineHandler:
         try:
             callback_data = callback.data
             user_id = callback.from_user.id
+            username = callback.from_user.username or "User"
+            
+            logger.info(f"📋 MAIN MENU ACTION: User {user_id} (@{username}) selected '{callback_data}'")
             
             # Check admin status for restricted features
             is_admin = user_id in self.config.ADMIN_IDS
             
             if callback_data == "refresh_main":
                 # Refresh main menu
-                welcome_text = self._get_welcome_message(is_admin, callback.from_user.username or "User")
+                logger.info(f"🔄 MENU REFRESH: Refreshing main menu for user {user_id}")
+                welcome_text = self._get_welcome_message(is_admin, username)
                 keyboard = self._get_main_keyboard(is_admin)
                 
                 await callback.message.edit_text(welcome_text, reply_markup=keyboard)
                 await callback.answer("🔄 Menu refreshed!")
+                logger.info(f"🤖 RESPONSE: Main menu refreshed for user {user_id}")
                 
             elif callback_data == "help":
                 # Show help information
+                logger.info(f"❓ HELP REQUEST: User {user_id} requested help menu")
                 await self._show_help_menu(callback)
                 
             elif callback_data == "help_manual":
+                logger.info(f"📖 MANUAL REQUEST: User {user_id} requested user manual")
                 await self._show_user_manual(callback)
                 
             elif callback_data == "help_faq":
+                logger.info(f"❓ FAQ REQUEST: User {user_id} requested FAQ")
                 await self._show_faq(callback)
                 
             elif callback_data == "help_troubleshoot":
+                logger.info(f"🔧 TROUBLESHOOT REQUEST: User {user_id} requested troubleshooting")
                 await self._show_troubleshooting(callback)
                 
             elif callback_data == "system_health" and not is_admin:
+                logger.warning(f"🚫 ACCESS DENIED: User {user_id} attempted to access admin-only system health")
                 await callback.answer("❌ Admin access required!", show_alert=True)
                 
             else:
                 # Route to feature handlers
+                logger.info(f"🎯 FEATURE ACCESS: User {user_id} accessing '{callback_data}' feature")
                 await self._route_to_feature(callback, callback_data)
                 
         except Exception as e:
-            logger.error(f"Error in main menu callback: {e}")
+            logger.error(f"❌ MAIN MENU ERROR: Error in main menu callback for user {callback.from_user.id}: {e}")
             await callback.answer("❌ An error occurred.", show_alert=True)
     
     async def _route_to_feature(self, callback: CallbackQuery, feature: str):
         """Route callback to specific feature handler"""
         try:
+            user_id = callback.from_user.id
+            feature_name = feature.replace('_', ' ').title()
+            
+            logger.info(f"🎯 FEATURE ROUTING: Loading '{feature_name}' for user {user_id}")
+            
             # Map callback data to handler methods
             feature_mapping = {
                 "channel_management": "show_channel_management_menu",
@@ -131,17 +153,19 @@ class InlineHandler:
             
             handler_method = feature_mapping.get(feature)
             if not handler_method:
+                logger.warning(f"❌ FEATURE NOT FOUND: Feature '{feature}' not available")
                 await callback.answer("❌ Feature not available", show_alert=True)
                 return
             
             # Create feature menu text and keyboard
             menu_text, menu_keyboard = await self._get_feature_menu(feature)
             
+            logger.info(f"🤖 FEATURE RESPONSE: Sending '{feature_name}' menu to user {user_id}")
             await callback.message.edit_text(menu_text, reply_markup=menu_keyboard)
-            await callback.answer(f"📋 {feature.replace('_', ' ').title()} menu loaded")
+            await callback.answer(f"📋 {feature_name} menu loaded")
             
         except Exception as e:
-            logger.error(f"Error routing to feature {feature}: {e}")
+            logger.error(f"❌ FEATURE ERROR: Error routing to feature '{feature}' for user {callback.from_user.id}: {e}")
             await callback.answer("❌ Feature temporarily unavailable", show_alert=True)
     
     async def _get_feature_menu(self, feature: str) -> tuple[str, InlineKeyboardMarkup]:

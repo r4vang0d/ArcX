@@ -69,46 +69,52 @@ class TelegramBot:
             raise
     
     async def _initialize_handlers(self):
-        """Initialize all feature handlers"""
+        """Initialize all feature handlers in parallel for faster startup"""
         try:
-            # Initialize each handler with dependencies
+            # Create all handler instances first (fast)
             self.handlers['channel_management'] = ChannelManagementHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['view_manager'] = ViewManagerHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['emoji_reactions'] = EmojiReactionsHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['analytics'] = AnalyticsHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['account_management'] = AccountManagementHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['system_health'] = SystemHealthHandler(
                 self.bot, self.db_manager, self.config
             )
-            
             self.handlers['live_management'] = LiveManagementHandler(
                 self.bot, self.db_manager, self.config
             )
             
-            
-            # Initialize all handlers
+            # Initialize all handlers in parallel (much faster)
+            initialization_tasks = []
             for handler_name, handler in self.handlers.items():
                 if hasattr(handler, 'initialize'):
-                    await handler.initialize()
-                logger.info(f"✅ {handler_name} handler initialized")
+                    initialization_tasks.append(self._initialize_single_handler(handler_name, handler))
+            
+            # Wait for all initializations to complete simultaneously
+            if initialization_tasks:
+                await asyncio.gather(*initialization_tasks)
                 
         except Exception as e:
             logger.error(f"Failed to initialize handlers: {e}")
+            raise
+    
+    async def _initialize_single_handler(self, handler_name: str, handler):
+        """Initialize a single handler with logging"""
+        try:
+            await handler.initialize()
+            logger.info(f"✅ {handler_name} handler initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize {handler_name}: {e}")
             raise
     
     def _register_routes(self):
@@ -151,6 +157,9 @@ class TelegramBot:
             user_id = message.from_user.id
             username = message.from_user.username or "Unknown"
             
+            # Log user interaction
+            logger.info(f"👤 USER INTERACTION: User {user_id} (@{username}) sent /start command")
+            
             # Check if user is admin
             is_admin = user_id in self.config.ADMIN_IDS
             
@@ -169,6 +178,7 @@ class TelegramBot:
             welcome_text = self._get_welcome_message(is_admin, username)
             keyboard = self._get_main_keyboard(is_admin)
             
+            logger.info(f"🤖 BOT RESPONSE: Sending welcome message to user {user_id}")
             await message.answer(welcome_text, reply_markup=keyboard)
             
         except Exception as e:
@@ -177,6 +187,11 @@ class TelegramBot:
     
     async def _help_command(self, message: Message):
         """Handle /help command"""
+        user_id = message.from_user.id
+        username = message.from_user.username or "Unknown"
+        
+        logger.info(f"👤 USER INTERACTION: User {user_id} (@{username}) sent /help command")
+        
         help_text = """
 🤖 <b>Telegram Channel Management Bot</b>
 
@@ -200,6 +215,7 @@ class TelegramBot:
 Contact the bot administrators for assistance.
         """
         
+        logger.info(f"🤖 BOT RESPONSE: Sending help message to user {user_id}")
         await message.answer(help_text)
     
     def _get_welcome_message(self, is_admin: bool, username: str) -> str:

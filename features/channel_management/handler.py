@@ -74,6 +74,9 @@ class ChannelManagementHandler:
         try:
             callback_data = callback.data
             user_id = callback.from_user.id
+            username = callback.from_user.username or "Unknown"
+            
+            logger.info(f"🎯 CHANNEL MGMT: User {user_id} (@{username}) pressed '{callback_data}'")
             
             # Ensure user exists
             await self.universal_db.ensure_user_exists(
@@ -85,32 +88,46 @@ class ChannelManagementHandler:
             
             # Route to appropriate handler
             if callback_data == "cm_add_channel":
+                logger.info(f"📝 ADD CHANNEL: User {user_id} starting add channel process")
                 await self._handle_add_channel_start(callback, state)
             elif callback_data == "cm_list_channels":
+                logger.info(f"📋 LIST CHANNELS: User {user_id} viewing channel list")
                 await self._handle_list_channels(callback, state)
             elif callback_data == "cm_settings":
+                logger.info(f"⚙️ SETTINGS: User {user_id} accessing channel settings")
                 await self._handle_channel_settings(callback, state)
             elif callback_data.startswith("cm_channel_"):
+                logger.info(f"📺 CHANNEL ACTION: User {user_id} interacting with specific channel")
                 await self._handle_channel_action(callback, state)
             elif callback_data.startswith("cm_delete_"):
+                logger.info(f"🗑️ DELETE: User {user_id} attempting to delete channel")
                 await self._handle_delete_channel(callback, state)
             elif callback_data.startswith("cm_edit_"):
+                logger.info(f"✏️ EDIT: User {user_id} editing channel")
                 await self._handle_edit_channel(callback, state)
             elif callback_data == "cm_input_ready":
+                logger.info(f"✅ INPUT READY: User {user_id} input ready for processing")
                 await self._handle_input_ready(callback, state)
             elif callback_data == "cm_add_help":
+                logger.info(f"❓ HELP: User {user_id} requested add channel help")
                 await self._handle_add_help(callback, state)
             elif callback_data == "cm_view_all_channels":
+                logger.info(f"👁️ VIEW ALL: User {user_id} viewing all channels")
                 await self._handle_view_all_channels(callback, state)
             elif callback_data == "cm_global_settings":
+                logger.info(f"🌐 GLOBAL SETTINGS: User {user_id} accessing global settings")
                 await self._handle_global_settings(callback, state)
             elif callback_data.startswith("cm_confirm_delete_"):
+                logger.info(f"⚠️ CONFIRM DELETE: User {user_id} confirming channel deletion")
                 await self._handle_confirm_delete(callback, state)
             elif callback_data.startswith("cm_refresh_"):
+                logger.info(f"🔄 REFRESH: User {user_id} refreshing channel data")
                 await self._handle_refresh_channel(callback, state)
             elif callback_data.startswith("cm_settings_"):
+                logger.info(f"⚙️ INDIVIDUAL SETTINGS: User {user_id} accessing individual channel settings")
                 await self._handle_individual_channel_settings(callback, state)
             else:
+                logger.warning(f"❓ UNKNOWN ACTION: User {user_id} pressed unknown action '{callback_data}'")
                 await callback.answer("❌ Unknown channel management action", show_alert=True)
                 
         except Exception as e:
@@ -160,16 +177,22 @@ Please send your channel information:
         """Handle channel input from user"""
         try:
             user_id = message.from_user.id
+            username = message.from_user.username or "Unknown"
             channel_input = message.text.strip()
+            
+            logger.info(f"📝 CHANNEL INPUT: User {user_id} (@{username}) provided: '{channel_input}'")
             
             # Show processing message
             processing_msg = await message.answer("🔍 Validating channel... Please wait.")
+            logger.info(f"🤖 PROCESSING: Sent validation message to user {user_id}")
             
             # Validate and process channel
+            logger.info(f"🔍 VALIDATION: Starting channel validation for user {user_id}")
             result = await self.validator.validate_and_process_channel(user_id, channel_input)
             
             if result['success']:
                 # Channel added successfully
+                logger.info(f"✅ SUCCESS: Channel '{result['channel_info']['title']}' added for user {user_id}")
                 await processing_msg.edit_text(
                     f"✅ <b>Channel Added Successfully!</b>\n\n"
                     f"📋 <b>Title:</b> {result['channel_info']['title']}\n"
@@ -178,6 +201,7 @@ Please send your channel information:
                     f"Your channel is now ready for view boosting and other operations!",
                     reply_markup=self.keyboards.get_channel_added_keyboard()
                 )
+                logger.info(f"🤖 SUCCESS RESPONSE: Sent success message to user {user_id}")
                 
                 # Log success
                 await self.db.log_system_event(
@@ -188,12 +212,14 @@ Please send your channel information:
                 
             else:
                 # Channel validation failed
+                logger.error(f"❌ FAILED: Channel validation failed for user {user_id}: {result['error']}")
                 await processing_msg.edit_text(
                     f"❌ <b>Failed to Add Channel</b>\n\n"
                     f"<b>Error:</b> {result['error']}\n\n"
                     f"Please check the channel information and try again.",
                     reply_markup=self.keyboards.get_add_channel_retry_keyboard()
                 )
+                logger.info(f"🤖 ERROR RESPONSE: Sent error message to user {user_id}")
             
             # Clear state
             await state.clear()
