@@ -5,6 +5,7 @@ Core bot functionality and session management
 
 import asyncio
 import logging
+import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -32,6 +33,12 @@ class TelegramBotCore:
         """Initialize bot core"""
         try:
             logger.info("🔧 Initializing Telegram bot core...")
+            
+            # Ensure sessions directory exists
+            sessions_dir = "sessions"
+            if not os.path.exists(sessions_dir):
+                os.makedirs(sessions_dir)
+                logger.info(f"✅ Created sessions directory: {sessions_dir}")
             
             # Load existing sessions
             await self._load_existing_sessions()
