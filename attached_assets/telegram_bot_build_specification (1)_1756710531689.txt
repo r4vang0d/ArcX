@@ -1,0 +1,1544 @@
+# COMPREHENSIVE TELEGRAM VIEW BOOSTER BOT SPECIFICATION
+# Complete Build Guide for Replit Agent
+
+==============================================================================
+OVERVIEW & PURPOSE
+==============================================================================
+
+Build a comprehensive Telegram Channel Management Bot with dual-interface system:
+- Admin interface for bot management and configuration
+- User interface for channel management and view boosting operations
+- Advanced live stream management with automatic group call joining
+- Multi-account Telegram client management using Telethon
+- PostgreSQL database for persistent data storage
+- Modular architecture with separate files for each feature
+
+CORE VISION: Create a versatile tool for content creators and marketers to manage Telegram channels, boost views, handle live streams, and automate account operations.
+
+==============================================================================
+ENVIRONMENT CONFIGURATION
+==============================================================================
+
+CREATE data.env FILE (External PostgreSQL - MANDATORY):
+```
+# data.env - External Telethon Database (DEFAULT)
+DB_HOST=18.234.56.13
+DB_PORT=5432
+DB_NAME=telethon_db
+DB_USER=arcx
+DB_PASSWORD=Ravan121
+```
+
+CREATE .env FILE (Bot Configuration):
+```
+# Bot Token from BotFather
+BOT_TOKEN=your_bot_token_here
+
+# Telegram API Credentials (get from https://my.telegram.org)
+DEFAULT_API_ID=94575
+DEFAULT_API_HASH=a3406de8d171bb422bb6ddf3bbd800e2
+
+# Admin User IDs (comma-separated)
+ADMIN_IDS=123456789,987654321
+
+# Bot Configuration
+DEFAULT_DELAY_MIN=1
+DEFAULT_DELAY_MAX=5
+MAX_RETRY_ATTEMPTS=3
+SESSION_DIR=sessions
+
+# Performance Settings
+MAX_ACTIVE_CLIENTS=100
+DB_POOL_SIZE=5
+DB_MAX_POOL_SIZE=20
+
+# Rate Limiting (Telegram API Limits)
+CALLS_PER_MINUTE_PER_ACCOUNT=20
+CALLS_PER_HOUR_PER_ACCOUNT=500
+
+# Batch Processing
+BATCH_SIZE=10
+MAX_ACCOUNTS_PER_OPERATION=50
+
+# Resource Management
+LOG_CLEANUP_DAYS=30
+```
+
+CRITICAL DATABASE RULE: 
+- ONLY use external PostgreSQL from data.env
+- NEVER use Replit's built-in database (heliumdb)
+- System must automatically remove Replit database variables
+
+==============================================================================
+TELETHON API REFERENCE (2025 - VERSION 2.x)
+==============================================================================
+
+CRITICAL: Use the following up-to-date Telethon API methods and types for all implementations:
+
+MESSAGING API:
+```python
+# Client Methods
+await client.send_message(chat, text=None, markdown=None, html=None, link_preview=False, reply_to=None, keyboard=None) # -> types.Message
+await client.edit_message(chat, message, text, reply_to=None) # -> types.Message
+await client.delete_messages(chat, message_ids, revoke=False)
+await client.forward_messages(chat, messages, to_peer)
+await client.pin_message(chat, message_id, notify=True)
+await client.unpin_message(chat, message_id)
+await client.read_message(chat, message_id)
+
+# Raw Functions (for advanced control)
+functions.messages.SendMessageRequest
+functions.messages.EditMessageRequest
+functions.messages.DeleteMessagesRequest
+functions.messages.ForwardMessagesRequest
+functions.messages.GetMessagesRequest
+functions.messages.ReadHistoryRequest
+
+# Types
+types.Message, types.Chat, types.InputPeer, types.Peer, types.Dialog
+```
+
+MEDIA API:
+```python
+# Client Methods
+await client.send_file(chat, file, caption=None, force_document=False) # -> types.Message
+await client.send_photo(chat, file, caption=None) # -> types.Message
+await client.send_video(chat, file, caption=None) # -> types.Message
+await client.send_audio(chat, file, caption=None) # -> types.Message
+await client.download(media, file=...)
+
+# Raw Functions
+functions.upload.SaveFilePartRequest
+functions.upload.SaveBigFilePartRequest
+functions.upload.GetFileRequest
+functions.messages.UploadMediaRequest
+
+# Types
+types.Photo, types.Document, types.InputFile, types.InputMediaUploadedDocument
+```
+
+CHANNELS & GROUPS API:
+```python
+# Client Methods
+await client.get_participants(chat, filter=None) # -> list[types.User]
+await client.add_participant(chat, user, fwd_limit=0)
+await client.set_participant_admin_rights(chat, user, rights)
+await client.set_participant_restrictions(chat, user, restrictions, until=None)
+await client.get_dialogs()
+await client.create_group(title, users)
+
+# Raw Functions (CRITICAL for Live Management)
+functions.channels.CreateChannelRequest
+functions.channels.JoinChannelRequest
+functions.channels.LeaveChannelRequest
+functions.channels.InviteToChannelRequest
+functions.channels.GetParticipantsRequest
+functions.channels.EditAdminRequest
+functions.messages.AddChatUserRequest
+functions.messages.ImportChatInviteRequest
+functions.phone.JoinGroupCallRequest  # CRITICAL for live streams
+
+# Types
+types.Channel, types.Chat, types.ChannelParticipant, types.ChatParticipant
+```
+
+USERS & BOTS API:
+```python
+# Client Methods
+await client.get_me() # -> types.User
+await client.get_entity(entity) # -> types.User or types.Channel or types.Chat
+await client.get_contacts()
+await client.update_username(username)
+await client.update_profile(first_name=None, last_name=None, about=None)
+
+# Raw Functions
+functions.users.GetUsersRequest
+functions.users.GetFullUserRequest
+functions.account.UpdateProfileRequest
+functions.account.UpdateUsernameRequest
+
+# Types
+types.User, types.UserFull, types.BotCommand, types.BotInfo
+```
+
+REACTIONS & REPLIES API:
+```python
+# Client Methods
+await client.send_message(chat, text, reply_to=message_id)
+await message.reply(text, reply_to=message_id)
+
+# Raw Functions (CRITICAL for Emoji Reactions feature)
+functions.messages.SendReactionRequest
+functions.messages.GetMessageReactionsListRequest
+functions.messages.GetMessagesReactionsRequest
+
+# Types
+types.MessageReactions, types.ReactionEmoji, types.ReactionCustomEmoji
+```
+
+FORWARDING & VIEWS API:
+```python
+# Client Methods
+await client.forward_messages(chat, messages, to_peer)
+await client.read_message(chat, message_id, mark_read=True)
+
+# Raw Functions (CRITICAL for View Boosting)
+functions.messages.ForwardMessagesRequest
+functions.messages.GetMessagesViewsRequest  # Use increment=True to boost views
+
+# Types
+types.MessageViews
+```
+
+TWO-FACTOR AUTH API:
+```python
+# Client Methods (CRITICAL for Account Management)
+await client.request_login_code(phone) # -> types.auth.SentCode
+await client.sign_in(token, code) # -> types.User or types.PasswordToken
+await client.check_password(password_token, password) # -> types.User
+
+# Raw Functions
+functions.auth.SendCodeRequest
+functions.auth.SignInRequest
+functions.auth.CheckPasswordRequest
+
+# Types
+types.auth.SentCode, types.auth.Authorization, types.PasswordToken
+```
+
+IMPLEMENTATION REQUIREMENTS:
+- Always use async/await with Telethon methods
+- Handle exceptions specific to each API call
+- Use proper type hints with Telethon types
+- Implement proper error handling for each function
+- Use raw functions for advanced features like live streaming
+- Follow Telethon 2.x patterns and syntax
+
+==============================================================================
+DEPENDENCIES & MODULES
+==============================================================================
+
+PYTHON PACKAGES (pyproject.toml):
+```toml
+[project]
+dependencies = [
+    "aiogram>=3.22.0",           # Telegram Bot Framework
+    "telethon>=1.40.0",          # Telegram Client Library
+    "psycopg2-binary>=2.9.10",   # PostgreSQL Database Adapter
+    "python-dotenv>=1.1.1",      # Environment Variables
+    "psutil>=7.0.0",             # System Monitoring
+    "pytz>=2025.2",              # Timezone Handling
+    "py-tgcalls>=2.2.6",         # Voice Call Handling (for audio loops)
+]
+```
+
+SYSTEM REQUIREMENTS:
+- Python 3.11+
+- PostgreSQL (external only)
+- FFmpeg (for audio processing)
+- OpenSSL (for secure connections)
+
+==============================================================================
+COMPLETE FILE STRUCTURE
+==============================================================================
+
+PROJECT ROOT:
+```
+📁 telegram_bot_project/
+├── 📄 main.py                           # Main entry point
+├── 📄 telegram_bot.py                   # Core bot implementation
+├── 📄 inline_handler.py                 # Central inline button router
+├── 📄 data.env                          # External database config
+├── 📄 .env                              # Bot configuration
+├── 📄 pyproject.toml                    # Dependencies
+├── 📄 replit.md                         # Project documentation
+│
+├── 📁 core/                             # Core system files
+│   ├── 📁 config/
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 config.py                 # Environment & database override
+│   ├── 📁 database/
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 coordinator.py           # Database coordination
+│   │   ├── 📄 unified_database.py      # Main database manager
+│   │   └── 📄 universal_access.py      # Universal database access
+│   └── 📁 bot/
+│       ├── 📄 __init__.py
+│       └── 📄 telegram_bot.py          # Bot core functionality
+│
+├── 📁 features/                         # All bot features (modular)
+│   ├── 📄 __init__.py
+│   │
+│   ├── 📁 channel_management/           # 🎯 Add Channel & My Channels
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 handler.py               # Main channel management
+│   │   ├── 📄 states.py                # FSM states for channel ops
+│   │   ├── 📄 keyboards.py             # Inline keyboards
+│   │   ├── 📄 utils.py                 # Channel validation utilities
+│   │   ├── 📁 core/
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 channel_processor.py # Channel processing logic
+│   │   └── 📁 handlers/
+│   │       ├── 📄 __init__.py
+│   │       ├── 📄 add_channel.py       # Add new channels
+│   │       └── 📄 list_channels.py     # List user channels
+│   │
+│   ├── 📁 view_manager/                 # 🚀 Boost Views
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 handler.py               # Main view boost coordinator
+│   │   ├── 📁 handlers/
+│   │   │   ├── 📄 __init__.py
+│   │   │   ├── 📄 auto_boost.py        # Automatic view boosting
+│   │   │   └── 📄 manual_boost.py      # Manual view boosting
+│   │   ├── 📁 states/
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 states.py            # View boost FSM states
+│   │   └── 📁 utils/
+│   │       ├── 📄 __init__.py
+│   │       ├── 📄 scheduler.py         # Boost scheduling
+│   │       └── 📄 time_parse.py        # Time parsing utilities
+│   │
+│   ├── 📁 emoji_reactions/              # 🎭 Emoji Reactions
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # Emoji reaction management
+│   │
+│   ├── 📁 analytics/                    # 📊 Analytics
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # Analytics dashboard
+│   │
+│   ├── 📁 account_management/           # 📱 Manage Accounts
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # Telegram account management
+│   │
+│   ├── 📁 system_health/                # 💚 System Health
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # System monitoring
+│   │
+│   ├── 📁 live_management/              # 🎙️ Live Management (CRITICAL)
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 handler.py               # Main live stream coordinator
+│   │   ├── 📄 keyboards.py             # Live management keyboards
+│   │   ├── 📄 states.py                # Live management FSM states
+│   │   ├── 📄 utils.py                 # Live utilities
+│   │   ├── 📁 auto_joiner/             # Automatic live stream joining
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 handler.py           # Auto join implementation
+│   │   └── 📁 manual_joiner/           # Manual live stream joining
+│   │       ├── 📄 __init__.py
+│   │       └── 📄 handler.py           # Manual join implementation
+│   │
+│   ├── 📁 view_monitoring/              # 👁️ View Monitoring
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # View monitoring system
+│   │
+│   ├── 📁 poll_manager/                 # 🗳️ Poll Manager
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 handler.py               # Poll management
+│   │
+│   └── 📁 settings/                     # ⚙️ Settings
+│       ├── 📄 __init__.py
+│       └── 📄 handler.py               # Bot settings management
+│
+├── 📁 services/                         # Background services
+│   ├── 📄 __init__.py
+│   ├── 📁 live/                        # Live stream services
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 instance_manager.py      # Telethon instance management
+│   ├── 📁 management/                  # Account management services
+│   │   ├── 📄 __init__.py
+│   │   ├── 📄 modern_session_manager.py # Session management
+│   │   ├── 📄 account_batch_manager.py  # Batch account operations
+│   │   ├── 📄 session_discovery.py      # Session discovery
+│   │   ├── 📄 status_manager.py         # Account status tracking
+│   │   ├── 📄 retry_queue_manager.py    # Retry queue system
+│   │   └── 📄 memory_manager.py         # Memory management
+│   ├── 📁 messaging/                   # Messaging services
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 rate_limiter.py          # Rate limiting
+│   └── 📁 monitoring/                  # Monitoring services
+│       ├── 📄 __init__.py
+│       ├── 📄 live_monitor_service.py  # Live stream monitoring
+│       └── 📄 view_monitor_service.py  # View monitoring
+│
+├── 📁 sessions/                        # Session management
+│   ├── 📄 __init__.py
+│   ├── 📁 handlers/                    # Session handlers
+│   │   ├── 📄 __init__.py
+│   │   ├── 📁 commands/                # Command handlers
+│   │   │   ├── 📄 __init__.py
+│   │   │   ├── 📄 start_handler.py     # /start command
+│   │   │   ├── 📄 help_handler.py      # /help command
+│   │   │   ├── 📄 stats_handler.py     # /stats command
+│   │   │   ├── 📄 status_handler.py    # /status command
+│   │   │   └── 📄 errors_handler.py    # Error handling
+│   │   └── 📁 inline/                  # Inline handlers
+│   │       ├── 📄 __init__.py
+│   │       └── 📄 inline_handler.py    # Inline button routing
+│   └── 📄 [account_sessions].session   # Telethon session files
+│
+├── 📁 utils/                           # Utility functions
+│   ├── 📄 __init__.py
+│   ├── 📄 link_handler.py              # Link processing utilities
+│   ├── 📁 helpers/                     # Helper functions
+│   │   ├── 📄 __init__.py
+│   │   └── 📄 helpers.py               # General helpers
+│   └── 📁 keyboards/                   # Keyboard utilities
+│       ├── 📄 __init__.py
+│       ├── 📄 inline.py                # Inline keyboard helpers
+│       └── 📄 inline_keyboards.py      # Keyboard definitions
+│
+└── 📁 debugger/                        # Debugging tools
+    ├── 📄 __init__.py
+    └── 📄 isolated_debug.py            # Debug utilities
+```
+
+==============================================================================
+FUTURISTIC UI DESIGN & ARCX BRANDING
+==============================================================================
+
+BRAND IDENTITY - ArcX:
+- Brand Name: "ArcX" (stylized as 𝘼𝙧𝙘𝙓 or ᴬʳᶜˣ)
+- Tagline: "Next-Gen Telegram Automation"
+- Color Scheme: Cyberpunk/Futuristic theme
+  * Primary: Electric Blue (#00BFFF)
+  * Secondary: Neon Purple (#8A2BE2)
+  * Accent: Lime Green (#32CD32)
+  * Dark: Deep Black (#0A0A0A)
+  * Light: Silver (#C0C0C0)
+
+FUTURISTIC UI ELEMENTS:
+```
+Bot Name: "𓊈𒆜𝘼𝙧𝙘𝙓 𝘽𝙤𝙩𒆜𓊉"
+Welcome Message: "🌐 Welcome to ArcX - Next-Generation Telegram Automation Platform"
+
+UI Style Guidelines:
+- Use geometric symbols: ▲ ▼ ◆ ● ■ ► ◀ 
+- Tech borders: ╭─────────╮ │ content │ ╰─────────╯
+- Progress bars: ▓▓▓▓▓▓▓░░░ 70%
+- Status indicators: ● ONLINE ● ACTIVE ● SYNCED
+- Loading animations: ⚡ ⟳ ⟲ ↻ ↺
+- Sci-fi bullets: ◦ ▸ ▪ ▫ ◂ ▸
+```
+
+FUTURISTIC BUTTON DESIGNS:
+```
+╭─────── ArcX CONTROL PANEL ───────╮
+│  🎯 [▶ CHANNEL_OPS]  📋 [▶ DATA_HUB]  │
+│  🚀 [▶ BOOST_SYS]   🎭 [▶ REACT_MOD]  │  
+│  📊 [▶ ANALYTICS]   📱 [▶ ACC_MATRIX]  │
+│  💚 [▶ SYS_HEALTH]  🎙️ [▶ LIVE_CORE]   │
+│  👁️ [▶ MONITOR]     🗳️ [▶ POLL_SYS]   │
+│  ⚙️ [▶ SETTINGS]                      │
+╰─────────────────────────────────────╯
+```
+
+PROGRESS INDICATORS:
+```
+System Status: ⟦████████▓▓⟧ 85% OPERATIONAL
+Live Streams: ⟦██████░░░░⟧ 60% ACTIVE  
+Account Health: ⟦██████████⟧ 100% OPTIMAL
+```
+
+NOTIFICATION STYLES:
+```
+✅ SUCCESS: Operation completed successfully
+⚠️ WARNING: Rate limit approaching  
+❌ ERROR: Connection failure detected
+🔄 PROCESSING: Initializing quantum protocols...
+⚡ BOOST: Performance enhancement active
+🎯 TARGET: Objective acquired and locked
+```
+
+BRANDING ELEMENTS:
+- Logo ASCII: 
+```
+    ▄▄▄       ██▀███   ▄████▄  ▒██   ██▒
+   ▒████▄    ▓██ ▒ ██▒▒██▀ ▀█  ▒▒ █ █ ▒░
+   ▒██  ▀█▄  ▓██ ░▄█ ▒▒▓█    ▄ ░░  █   ░
+   ░██▄▄▄▄██ ▒██▀▀█▄  ▒▓▓▄ ▄██▒ ░ █ █ ▒ 
+    ▓█   ▓██▒░██▓ ▒██▒▒ ▓███▀ ░▒██▒ ▒██▒
+    ▒▒   ▓▒█░░ ▒▓ ░▒▓░░ ░▒ ▒  ░▒▒ ░ ░▓ ░
+     ▒   ▒▒ ░  ░▒ ░ ▒░  ░  ▒   ░░   ░▒ ░
+     ░   ▒     ░░   ░ ░        ░    ░  
+         ░  ░   ░     ░ ░      ░    ░  
+```
+
+COMMAND MESSAGES:
+```
+/start: "🌐 ArcX QUANTUM INTERFACE INITIALIZED\n⚡ READY FOR NEURAL LINK..."
+/help: "📚 ArcX COMMAND MATRIX\n▸ Navigate the digital realm with precision"
+/status: "💚 SYSTEM DIAGNOSTICS\n▸ All quantum channels operational"
+```
+
+==============================================================================
+MAIN FEATURES & INLINE BUTTONS
+==============================================================================
+
+ADMIN MAIN MENU BUTTONS:
+```
+[🎯 Add Channel]  [📋 My Channels]
+[🚀 Boost Views]  [🎭 Emoji Reactions]
+[📊 Analytics]    [📱 Manage Accounts]
+[💚 System Health] [🎙️ Live Management]
+[👁️ View Monitoring] [🗳️ Poll Manager]
+[⚙️ Settings]
+```
+
+USER MAIN MENU BUTTONS:
+```
+[🎯 Add Channel]  [📋 My Channels]
+[🚀 Boost Views]  [📊 Analytics]
+[💚 System Health]
+```
+
+FEATURE IMPLEMENTATIONS:
+
+1. 🎯 ADD CHANNEL (features/channel_management/):
+   - Inline buttons: [➕ Add New] [🔗 By Link] [📱 From Account]
+   - States: WAITING_CHANNEL_LINK, SELECTING_ACCOUNT, CONFIRMING_ADD
+   - Functions: Validate channel links, extract channel info, add to database
+   - Sub-features: Link validation, duplicate checking, access verification
+
+2. 📋 MY CHANNELS (features/channel_management/):
+   - Inline buttons: [📋 List All] [🔍 Search] [🗑️ Remove] [⚙️ Settings]
+   - Pagination support with [◀️ Prev] [▶️ Next] buttons
+   - Functions: List user channels, search channels, remove channels
+   - Channel details: Title, username, member count, last update
+
+3. 🚀 BOOST VIEWS (features/view_manager/):
+   - AUTO BOOST buttons: [⚡ Quick Boost] [⏰ Schedule] [🔄 Auto Mode]
+   - MANUAL BOOST buttons: [🎯 Target Post] [📊 Custom Amount] [⏱️ Set Delay]
+   - States: SELECT_CHANNEL, SET_AMOUNT, SET_DELAY, CONFIRM_BOOST
+   - Functions: Post targeting, view increment, delay management
+   - Sub-handlers: auto_boost.py, manual_boost.py
+
+4. 🎭 EMOJI REACTIONS (features/emoji_reactions/):
+   - Buttons: [😍 Add Reactions] [📊 Reaction Stats] [⚙️ Settings]
+   - Functions: Add emoji reactions to posts, track reaction patterns
+   - Emoji types: ❤️ 👍 😍 😂 😢 😮 🤬 (Telegram standard reactions)
+
+5. 📊 ANALYTICS (features/analytics/):
+   - Buttons: [📈 View Stats] [👥 Account Stats] [📊 Channel Stats] [📅 Daily Report]
+   - Functions: Generate reports, track performance, export data
+   - Charts: Views over time, account performance, success rates
+
+6. 📱 MANAGE ACCOUNTS (features/account_management/):
+   - Buttons: [➕ Add Account] [📋 List Accounts] [🔄 Update Status] [🗑️ Remove]
+   - States: WAITING_PHONE, WAITING_CODE, WAITING_PASSWORD
+   - Functions: Add Telegram accounts, verify accounts, manage sessions
+   - Account status: ACTIVE, BANNED, LIMITED, INACTIVE
+
+7. 💚 SYSTEM HEALTH (features/system_health/):
+   - Buttons: [📊 System Stats] [🔄 Refresh] [📝 Logs] [⚠️ Alerts]
+   - Functions: Monitor system resources, database health, account status
+   - Metrics: CPU usage, memory usage, database connections, active accounts
+
+8. 🎙️ LIVE MANAGEMENT (features/live_management/) - CRITICAL FEATURE:
+   - AUTO JOIN buttons: [⚡ Auto Join] [⏹️ Stop Auto] [⚙️ Auto Settings]
+   - MANUAL JOIN buttons: [🎯 Join Specific] [📋 Join Queue] [🔄 Retry Failed]
+   - States: SELECT_CHANNEL, WAITING_ACCOUNTS, JOINING_PROCESS
+   - IMPLEMENTATION DETAILS:
+     * First join with Telethon using JoinGroupCallRequest
+     * Then establish WebRTC connection for audio
+     * Send audio in continuous loop to prevent disconnection
+     * Handle GroupcallInvalidError with exponential backoff
+     * Retry queue system for failed joins
+     * Real-time monitoring of live streams
+
+9. 👁️ VIEW MONITORING (features/view_monitoring/):
+   - Buttons: [👁️ Start Monitor] [⏹️ Stop Monitor] [📊 Monitor Stats]
+   - Functions: Detect new posts, auto-boost views, track post performance
+   - Monitoring interval: Every 30 seconds for new posts
+
+10. 🗳️ POLL MANAGER (features/poll_manager/):
+    - Buttons: [🗳️ Vote Polls] [📊 Poll Stats] [⚙️ Vote Settings]
+    - Functions: Automatically vote on polls, track voting patterns
+
+11. ⚙️ SETTINGS (features/settings/):
+    - Buttons: [🔧 Bot Settings] [👤 User Settings] [🔔 Notifications] [🔐 Security]
+    - Functions: Configure delays, limits, notifications, security settings
+
+==============================================================================
+LIVE MANAGEMENT DETAILED IMPLEMENTATION
+==============================================================================
+
+CRITICAL: Live Management WebRTC Audio Loop Implementation
+
+PROCESS FLOW:
+1. User selects live stream channel to join
+2. System fetches available accounts from database
+3. For each account:
+   a. Create Telethon client instance
+   b. Join group call using JoinGroupCallRequest
+   c. Establish WebRTC connection
+   d. Start audio loop transmission
+   e. Monitor connection health
+
+TELETHON GROUP CALL JOIN:
+```python
+from telethon.tl.functions.phone import JoinGroupCallRequest
+from telethon.tl.types import DataJSON
+
+# Join group call
+await client(JoinGroupCallRequest(
+    call=group_call,
+    params=DataJSON(data=json.dumps({
+        'ufrag': webrtc_params['ufrag'],
+        'pwd': webrtc_params['pwd'],
+        'fingerprints': webrtc_params['fingerprints'],
+        'ssrc': webrtc_params['ssrc']
+    }))
+))
+```
+
+WEBRTC AUDIO LOOP:
+```python
+import asyncio
+from py_tgcalls import PyTgCalls
+
+# Initialize PyTgCalls
+pytgcalls = PyTgCalls(client)
+
+# Join with audio stream
+await pytgcalls.join_group_call(
+    chat_id=channel_id,
+    stream=AudioPiped('path/to/audio/loop.ogg'),  # Loop audio file
+    stream_type=StreamType().pulse_stream
+)
+
+# Keep connection alive with periodic audio
+while connected:
+    await asyncio.sleep(1)  # Send audio chunk every second
+    if not pytgcalls.get_call(chat_id):
+        # Reconnect if disconnected
+        await rejoin_with_audio()
+```
+
+AUDIO LOOP FILE:
+- Create silent audio file (1-second loop) in OGG format
+- Continuously stream this file to maintain connection
+- Handle disconnections with automatic rejoin
+- Monitor audio stream health
+
+ERROR HANDLING:
+- GroupcallInvalidError: Retry with fresh group call info
+- ConnectionError: Reconnect with new WebRTC parameters
+- FloodWaitError: Wait specified time before retry
+- AudioStreamError: Restart audio loop
+
+RETRY MECHANISM:
+- Exponential backoff: 2s → 5s → 10s → 30s → 60s
+- Maximum 50 retry attempts per account
+- Background retry queues for persistent attempts
+- Admin alerts when max retries reached
+
+==============================================================================
+DATABASE SCHEMA
+==============================================================================
+
+REQUIRED TABLES:
+
+1. users (Bot users)
+2. accounts (Telegram accounts for operations)
+3. channels (Channel/group information)
+4. user_channels (User-channel relationships)
+5. account_channels (Account-channel joins)
+6. live_channels (Live stream monitoring)
+7. live_logs (Live management logs)
+8. logs (General operation logs)
+9. auto_boost_settings (Auto boost configuration)
+10. auto_boost_history (Auto boost tracking)
+11. manual_boost_history (Manual boost tracking)
+12. view_monitors (View monitoring configuration)
+13. account_logs (Account operation logs)
+14. call_participants (Live call participants)
+15. configs (Bot configuration)
+16. messages (Message tracking)
+17. polls (Poll information)
+18. db_setup_info (Database setup tracking)
+
+CRITICAL COLUMNS:
+- All tables need 'status' column for filtering
+- Timestamp columns: created_at, updated_at
+- Foreign key relationships for data integrity
+- JSON columns for flexible configuration storage
+
+==============================================================================
+UNIVERSAL HANDLER ARCHITECTURE
+==============================================================================
+
+CRITICAL: Create universal handlers that prevent cross-feature interference and allow independent feature modifications.
+
+UNIVERSAL HANDLER SYSTEM:
+```
+📁 core/
+├── 📁 handlers/
+│   ├── 📄 universal_base.py          # Base handler class
+│   ├── 📄 universal_telethon.py      # Universal Telethon operations
+│   ├── 📄 universal_database.py      # Universal DB operations
+│   ├── 📄 universal_error.py         # Universal error handling
+│   ├── 📄 universal_validation.py    # Universal input validation
+│   └── 📄 universal_response.py      # Universal response formatting
+```
+
+UNIVERSAL BASE HANDLER:
+```python
+class UniversalBaseHandler:
+    def __init__(self, db_manager, session_manager):
+        self.db = db_manager
+        self.session_manager = session_manager
+        self.error_handler = UniversalErrorHandler()
+        self.validator = UniversalValidator()
+        self.responder = UniversalResponseHandler()
+    
+    async def safe_execute(self, operation, *args, **kwargs):
+        """Universal safe execution wrapper"""
+        try:
+            return await operation(*args, **kwargs)
+        except Exception as e:
+            return await self.error_handler.handle(e, operation.__name__)
+```
+
+UNIVERSAL TELETHON OPERATIONS:
+```python
+class UniversalTelethonHandler:
+    @staticmethod
+    async def safe_join_channel(client, channel, increment_views=True):
+        """Universal channel joining with view increment"""
+        try:
+            # Join channel
+            await client(functions.channels.JoinChannelRequest(channel))
+            
+            # Increment views if requested
+            if increment_views:
+                await client(functions.messages.GetMessagesViewsRequest(
+                    peer=channel,
+                    id=[1],  # Message ID
+                    increment=True  # CRITICAL: Increments view count
+                ))
+            return True
+        except Exception as e:
+            await UniversalErrorHandler.log_error(f"Join failed: {e}")
+            return False
+    
+    @staticmethod
+    async def safe_leave_channel(client, channel):
+        """Universal channel leaving"""
+        try:
+            await client(functions.channels.LeaveChannelRequest(channel))
+            return True
+        except Exception as e:
+            await UniversalErrorHandler.log_error(f"Leave failed: {e}")
+            return False
+```
+
+FEATURE ISOLATION PRINCIPLE:
+- Each feature inherits from UniversalBaseHandler
+- No direct cross-feature imports
+- All communication through universal handlers
+- Database operations through universal_database.py
+- Telethon operations through universal_telethon.py
+
+==============================================================================
+FEATURE-SPECIFIC TELETHON FUNCTION MAPPING
+==============================================================================
+
+1. 🎯 CHANNEL MANAGEMENT:
+```python
+# Add Channel
+functions.channels.JoinChannelRequest(channel)
+functions.messages.ImportChatInviteRequest(hash)  # For invite links
+functions.channels.GetFullChannelRequest(channel)  # Get channel info
+
+# List Channels
+functions.messages.GetDialogsRequest()
+functions.channels.GetParticipantsRequest(channel)
+
+# Remove Channel
+functions.channels.LeaveChannelRequest(channel)
+```
+
+2. 🚀 VIEW BOOSTING:
+```python
+# Manual View Boost
+functions.messages.GetMessagesViewsRequest(
+    peer=channel,
+    id=[message_id],
+    increment=True  # CRITICAL: This increments the view count
+)
+
+# Auto View Boost
+functions.messages.GetHistoryRequest(peer, limit=1)  # Get latest post
+functions.messages.GetMessagesViewsRequest(peer, id=[msg_id], increment=True)
+
+# View Monitoring
+functions.messages.GetMessagesRequest(peer, [msg_id])
+```
+
+3. 🎭 EMOJI REACTIONS:
+```python
+# Add Reactions
+functions.messages.SendReactionRequest(
+    peer=peer,
+    msg_id=message_id,
+    reaction=[types.ReactionEmoji(emoticon="❤")]  # Multiple reactions
+)
+
+# Get Reaction Stats
+functions.messages.GetMessageReactionsListRequest(peer, msg_id)
+```
+
+4. 📱 ACCOUNT MANAGEMENT:
+```python
+# Add Account
+functions.auth.SendCodeRequest(phone_number, api_id, api_hash)
+functions.auth.SignInRequest(phone_number, phone_code_hash, phone_code)
+functions.auth.CheckPasswordRequest(password)  # For 2FA
+
+# Account Status
+functions.users.GetFullUserRequest(user_id)
+functions.account.GetAccountTTLRequest()
+```
+
+5. 🎙️ LIVE MANAGEMENT:
+```python
+# Join Live Stream
+functions.phone.CreateGroupCallRequest(peer, title)
+functions.phone.JoinGroupCallRequest(
+    call=call,
+    params=types.DataJSON(data=webrtc_params)
+)
+
+# Leave Live Stream
+functions.phone.LeaveGroupCallRequest(call, source)
+
+# Get Live Stream Info
+functions.phone.GetGroupCallRequest(call)
+```
+
+6. 👁️ VIEW MONITORING:
+```python
+# Monitor New Posts
+functions.messages.GetHistoryRequest(peer, limit=10, offset_date=last_check)
+functions.messages.GetMessagesViewsRequest(peer, id=msg_ids, increment=False)
+
+# Auto-Boost Detection
+functions.messages.GetMessagesRequest(peer, [latest_msg_id])
+```
+
+7. 🗳️ POLL MANAGER:
+```python
+# Vote on Polls
+functions.messages.SendVoteRequest(
+    peer=peer,
+    msg_id=message_id,
+    options=[option_bytes]
+)
+
+# Get Poll Results
+functions.messages.GetPollResultsRequest(peer, msg_id)
+```
+
+==============================================================================
+ERROR HANDLING PATTERNS (LEARNED FROM 5 DAYS)
+==============================================================================
+
+CRITICAL FIXES IMPLEMENTED:
+
+1. DATABASE SCHEMA ERRORS:
+```python
+# Fix: Missing 'status' column errors
+async def ensure_schema_compatibility():
+    """Add missing columns to existing tables"""
+    try:
+        await db.execute_sql("ALTER TABLE channels ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'")
+        await db.execute_sql("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'")
+    except Exception as e:
+        logger.warning(f"Schema fix attempted: {e}")
+
+# Fix: Database connection errors
+class DatabaseConnectionHandler:
+    @staticmethod
+    async def safe_connect():
+        """Safe database connection with fallback"""
+        try:
+            # Force external PostgreSQL
+            db_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+            return await asyncpg.connect(db_url)
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
+```
+
+2. TELETHON CONNECTION ERRORS:
+```python
+# Fix: Connection reset by peer
+async def handle_connection_reset(client):
+    """Handle Telethon connection resets"""
+    try:
+        if not client.is_connected():
+            await client.connect()
+            await asyncio.sleep(2)  # Wait for stabilization
+    except ConnectionResetError:
+        await asyncio.sleep(5)  # Backoff before retry
+        await client.disconnect()
+        await client.connect()
+
+# Fix: Group call invalid errors
+async def handle_group_call_error(client, channel):
+    """Handle GroupcallInvalidError with fresh call info"""
+    try:
+        # Get fresh group call info
+        full_channel = await client(functions.channels.GetFullChannelRequest(channel))
+        if full_channel.full_chat.call:
+            return full_channel.full_chat.call
+    except Exception as e:
+        logger.error(f"Failed to get fresh call info: {e}")
+    return None
+```
+
+3. RATE LIMITING ERRORS:
+```python
+# Fix: FloodWaitError handling
+async def handle_flood_wait(error):
+    """Smart FloodWait handling with exact timing"""
+    if hasattr(error, 'seconds'):
+        wait_time = error.seconds
+        logger.warning(f"FloodWait: waiting {wait_time} seconds")
+        await asyncio.sleep(wait_time + 1)  # Add 1 second buffer
+        return True
+    return False
+
+# Fix: Rate limit distribution
+class RateLimitManager:
+    def __init__(self):
+        self.account_timers = {}
+    
+    async def can_execute(self, account_id):
+        """Check if account can execute operation"""
+        now = time.time()
+        if account_id in self.account_timers:
+            if now - self.account_timers[account_id] < 3:  # 3-second cooldown
+                return False
+        self.account_timers[account_id] = now
+        return True
+```
+
+4. SESSION MANAGEMENT ERRORS:
+```python
+# Fix: Session corruption
+async def validate_session(session_path):
+    """Validate session file integrity"""
+    try:
+        if not os.path.exists(session_path):
+            return False
+        
+        # Check file size (corrupted sessions are usually 0 bytes)
+        if os.path.getsize(session_path) < 100:
+            logger.warning(f"Session file too small: {session_path}")
+            return False
+        
+        return True
+    except Exception:
+        return False
+
+# Fix: Multiple client instances
+class SessionIsolationManager:
+    def __init__(self):
+        self.active_clients = {}
+    
+    async def get_isolated_client(self, session_name):
+        """Get isolated client instance"""
+        if session_name not in self.active_clients:
+            client = TelegramClient(session_name, api_id, api_hash)
+            await client.connect()
+            self.active_clients[session_name] = client
+        return self.active_clients[session_name]
+```
+
+5. MEMORY MANAGEMENT ERRORS:
+```python
+# Fix: Memory leaks in long-running operations
+class MemoryManager:
+    @staticmethod
+    async def cleanup_resources():
+        """Periodic cleanup of resources"""
+        try:
+            # Clear message caches
+            gc.collect()
+            
+            # Close idle connections
+            for client in idle_clients:
+                if client.is_connected():
+                    await client.disconnect()
+            
+        except Exception as e:
+            logger.error(f"Cleanup failed: {e}")
+
+# Fix: Large message handling
+async def safe_message_processing(messages):
+    """Process messages in batches to prevent memory issues"""
+    batch_size = 50
+    for i in range(0, len(messages), batch_size):
+        batch = messages[i:i + batch_size]
+        await process_message_batch(batch)
+        await asyncio.sleep(0.1)  # Prevent overwhelming
+```
+
+==============================================================================
+CORE ARCHITECTURE PRINCIPLES
+==============================================================================
+
+1. UNIVERSAL HANDLER DESIGN:
+   - All features inherit from UniversalBaseHandler
+   - Shared error handling and validation
+   - Isolated feature operation
+   - No cross-feature dependencies
+
+2. DATABASE OVERRIDE SYSTEM:
+   - Automatically remove Replit database variables
+   - Force external PostgreSQL connection
+   - Schema compatibility checking
+   - Connection pooling for performance
+
+3. SESSION ISOLATION:
+   - Independent Telethon clients per account
+   - Session validation and corruption detection
+   - Instance health monitoring
+   - Automatic session recovery
+
+4. COMPREHENSIVE ERROR HANDLING:
+   - Universal error patterns for all features
+   - Specific Telegram API error handling
+   - Database schema error recovery
+   - Connection reset handling
+   - Rate limiting with intelligent backoff
+
+5. MEMORY & RESOURCE MANAGEMENT:
+   - Periodic resource cleanup
+   - Batch processing for large operations
+   - Connection pooling
+   - Garbage collection optimization
+
+6. FEATURE ISOLATION:
+   - Independent feature modification
+   - Universal communication layer
+   - Shared utility functions
+   - Modular error handling
+
+==============================================================================
+BATCH LOADING & PAGINATION SYSTEM (100 ITEMS LIMIT)
+==============================================================================
+
+CRITICAL: Implement universal pagination for all list operations to handle large datasets efficiently.
+
+UNIVERSAL PAGINATION PATTERN:
+```python
+class UniversalPagination:
+    DEFAULT_LIMIT = 100  # Load only 100 items at once
+    DEFAULT_PAGE_SIZE = 10  # Display 10 items per page for UI
+    
+    @staticmethod
+    def paginate_database_query(query: str, limit: int = 100, offset: int = 0):
+        """Universal database pagination"""
+        return f"{query} LIMIT {limit} OFFSET {offset}"
+    
+    @staticmethod
+    def paginate_ui_display(items: List, page: int = 0, per_page: int = 10):
+        """Universal UI pagination"""
+        start_idx = page * per_page
+        end_idx = start_idx + per_page
+        return items[start_idx:end_idx]
+    
+    @staticmethod
+    def create_pagination_buttons(current_page: int, total_items: int, per_page: int = 10, callback_prefix: str = "page"):
+        """Universal pagination buttons"""
+        total_pages = (total_items + per_page - 1) // per_page
+        buttons = []
+        
+        if current_page > 0:
+            buttons.append(InlineKeyboardButton(text="⬅️ Previous", callback_data=f"{callback_prefix}:{current_page-1}"))
+        if current_page < total_pages - 1:
+            buttons.append(InlineKeyboardButton(text="➡️ Next", callback_data=f"{callback_prefix}:{current_page+1}"))
+        
+        return buttons
+```
+
+BATCH MANAGEMENT SYSTEM:
+```python
+class UniversalBatchManager:
+    """Manages loading large datasets in batches of 100"""
+    
+    def __init__(self, batch_size: int = 100):
+        self.batch_size = batch_size
+        self.current_batch_index = 0
+        self.total_items_count = 0
+        self.current_batch_items = []
+        self.batch_load_cooldown = 300  # 5 minutes cooldown
+        self.last_batch_load_time = None
+    
+    async def load_batch(self, batch_index: int, query_function) -> Dict[str, Any]:
+        """Universal batch loading"""
+        try:
+            # Check cooldown
+            if self._is_cooldown_active():
+                return {"success": False, "message": "Batch load cooldown active"}
+            
+            # Calculate offset
+            offset = batch_index * self.batch_size
+            
+            # Load batch using provided query function
+            batch_items = await query_function(self.batch_size, offset)
+            
+            if not batch_items:
+                return {"success": False, "message": f"No items found for batch {batch_index + 1}"}
+            
+            # Store batch info
+            self.current_batch_items = batch_items
+            self.current_batch_index = batch_index
+            self.last_batch_load_time = datetime.now()
+            
+            return {
+                "success": True,
+                "items": batch_items,
+                "batch_number": batch_index + 1,
+                "total_batches": self._get_total_batches(),
+                "loaded_count": len(batch_items)
+            }
+            
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+```
+
+FEATURE-SPECIFIC PAGINATION:
+
+1. 🎯 CHANNEL MANAGEMENT:
+```python
+# Database Query (Load 100 channels at once)
+async def get_user_channels_batch(user_id: int, limit: int = 100, offset: int = 0):
+    return await db.execute_sql("""
+        SELECT * FROM user_channels uc
+        JOIN channels c ON uc.channel_id = c.id
+        WHERE uc.user_id = %s AND uc.is_active = true
+        ORDER BY uc.added_at DESC
+        LIMIT %s OFFSET %s
+    """, (user_id, limit, offset))
+
+# UI Display (Show 10 channels per page)
+def display_channels_page(channels: List, page: int = 0):
+    return UniversalPagination.paginate_ui_display(channels, page, 10)
+```
+
+2. 📱 ACCOUNT MANAGEMENT:
+```python
+# Batch Account Loading (100 accounts per batch)
+class AccountBatchManager(UniversalBatchManager):
+    async def load_accounts_batch(self, batch_index: int):
+        async def query_accounts(limit, offset):
+            return await db.execute_sql("""
+                SELECT * FROM accounts 
+                WHERE status = 'active' 
+                ORDER BY created_at ASC 
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
+        
+        return await self.load_batch(batch_index, query_accounts)
+```
+
+3. 📊 ANALYTICS:
+```python
+# Large Dataset Handling
+async def get_analytics_data_batched(date_from: str, date_to: str):
+    """Process analytics in batches to prevent memory issues"""
+    batch_size = 100
+    offset = 0
+    all_data = []
+    
+    while True:
+        batch = await db.execute_sql("""
+            SELECT * FROM logs 
+            WHERE created_at BETWEEN %s AND %s 
+            ORDER BY created_at DESC 
+            LIMIT %s OFFSET %s
+        """, (date_from, date_to, batch_size, offset))
+        
+        if not batch:
+            break
+            
+        all_data.extend(batch)
+        offset += batch_size
+        
+        # Process batch immediately to free memory
+        await process_analytics_batch(batch)
+    
+    return all_data
+```
+
+==============================================================================
+WINDOWS COMPATIBILITY REQUIREMENTS
+==============================================================================
+
+CRITICAL: Ensure 100% Windows compatibility without any shell scripts or platform-specific dependencies.
+
+WINDOWS-COMPATIBLE IMPLEMENTATION:
+```python
+import os
+import sys
+import asyncio
+import pathlib
+from typing import Union
+
+class WindowsCompatibility:
+    """Ensure Windows compatibility for all operations"""
+    
+    @staticmethod
+    def get_safe_path(path: Union[str, pathlib.Path]) -> str:
+        """Convert paths to Windows-safe format"""
+        return str(pathlib.Path(path).resolve())
+    
+    @staticmethod
+    def create_directory(path: str) -> bool:
+        """Windows-safe directory creation"""
+        try:
+            pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create directory {path}: {e}")
+            return False
+    
+    @staticmethod
+    def get_session_path(session_name: str, session_dir: str = "sessions") -> str:
+        """Windows-safe session file path"""
+        session_dir_path = pathlib.Path(session_dir)
+        session_dir_path.mkdir(parents=True, exist_ok=True)
+        return str(session_dir_path / f"{session_name}.session")
+    
+    @staticmethod
+    def setup_asyncio_windows():
+        """Configure asyncio for Windows"""
+        if sys.platform.startswith('win'):
+            # Set event loop policy for Windows
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+```
+
+WINDOWS FILE HANDLING:
+```python
+# NEVER use shell commands or .bat files
+# ALWAYS use Python built-in functions
+
+# ❌ BAD (Linux/Unix specific):
+# os.system("mkdir -p sessions")
+# subprocess.run(["chmod", "+x", "script.sh"])
+
+# ✅ GOOD (Windows compatible):
+pathlib.Path("sessions").mkdir(parents=True, exist_ok=True)
+os.chmod(file_path, 0o755) if not sys.platform.startswith('win') else None
+```
+
+WINDOWS ENVIRONMENT SETUP:
+```python
+def setup_windows_environment():
+    """Setup environment for Windows"""
+    # Configure asyncio
+    WindowsCompatibility.setup_asyncio_windows()
+    
+    # Create required directories
+    required_dirs = ["sessions", "logs", "temp", "downloads"]
+    for dir_name in required_dirs:
+        WindowsCompatibility.create_directory(dir_name)
+    
+    # Set Windows-specific configurations
+    if sys.platform.startswith('win'):
+        # Disable ANSI color codes in Windows CMD
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        
+        # Set proper temp directory
+        temp_dir = os.environ.get('TEMP', 'C:\\temp')
+        os.environ['TEMP_DIR'] = temp_dir
+```
+
+==============================================================================
+5-DAY PROJECT INSIGHTS & CRITICAL FIXES
+==============================================================================
+
+COMPREHENSIVE ERROR PATTERNS (Based on Real Experience):
+
+1. **DATABASE SCHEMA EVOLUTION FIXES:**
+```python
+async def ensure_database_compatibility():
+    """Fix all schema compatibility issues discovered over 5 days"""
+    schema_fixes = [
+        "ALTER TABLE channels ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'",
+        "ALTER TABLE live_channels ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'",
+        "CREATE INDEX IF NOT EXISTS idx_channels_status ON channels(status)",
+        "CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status)",
+        "CREATE INDEX IF NOT EXISTS idx_accounts_phone ON accounts(phone_number)",
+        "CREATE INDEX IF NOT EXISTS idx_channels_chat_id ON channels(chat_id)",
+        "CREATE INDEX IF NOT EXISTS idx_channels_username ON channels(username)"
+    ]
+    
+    for fix in schema_fixes:
+        try:
+            await db.execute_sql(fix)
+        except Exception as e:
+            logger.warning(f"Schema fix attempted: {fix} - {e}")
+```
+
+2. **TELETHON CONNECTION RESILIENCE:**
+```python
+class TelethonConnectionManager:
+    """Handles all Telethon connection issues discovered over 5 days"""
+    
+    @staticmethod
+    async def resilient_connect(client: TelegramClient, max_retries: int = 5):
+        """Connection with automatic retry and error handling"""
+        for attempt in range(max_retries):
+            try:
+                if not client.is_connected():
+                    await client.connect()
+                    await asyncio.sleep(2)  # Stabilization delay
+                return True
+            except ConnectionResetError:
+                logger.warning(f"Connection reset on attempt {attempt + 1}")
+                await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
+                if client.is_connected():
+                    await client.disconnect()
+            except Exception as e:
+                logger.error(f"Connection error on attempt {attempt + 1}: {e}")
+                await asyncio.sleep(3 * (attempt + 1))
+        return False
+    
+    @staticmethod
+    async def handle_group_call_invalid(client: TelegramClient, channel, max_retries: int = 3):
+        """Handle GroupcallInvalidError with fresh call info"""
+        for attempt in range(max_retries):
+            try:
+                # Get completely fresh group call info
+                full_channel = await client(functions.channels.GetFullChannelRequest(channel))
+                if full_channel.full_chat.call:
+                    # Wait a bit before using fresh info
+                    await asyncio.sleep(2)
+                    return full_channel.full_chat.call
+            except Exception as e:
+                logger.error(f"Fresh call info attempt {attempt + 1} failed: {e}")
+                await asyncio.sleep(5 * (attempt + 1))
+        return None
+```
+
+3. **MEMORY LEAK PREVENTION:**
+```python
+class MemoryOptimizer:
+    """Prevents memory leaks discovered during 5-day testing"""
+    
+    @staticmethod
+    async def cleanup_telethon_instances():
+        """Regular cleanup of Telethon instances"""
+        try:
+            # Force garbage collection
+            gc.collect()
+            
+            # Clear message caches
+            for client in active_clients:
+                if hasattr(client, '_message_cache'):
+                    client._message_cache.clear()
+            
+            # Disconnect idle clients
+            idle_threshold = datetime.now() - timedelta(minutes=30)
+            for client_id, last_used in client_last_used.items():
+                if last_used < idle_threshold and client_id in active_clients:
+                    await active_clients[client_id].disconnect()
+                    del active_clients[client_id]
+            
+        except Exception as e:
+            logger.error(f"Memory cleanup failed: {e}")
+    
+    @staticmethod
+    async def batch_process_large_operations(items: List, batch_size: int = 50):
+        """Process large operations in batches to prevent memory issues"""
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i + batch_size]
+            await process_batch(batch)
+            await asyncio.sleep(0.1)  # Prevent overwhelming
+            gc.collect()  # Force cleanup after each batch
+```
+
+4. **RATE LIMITING INTELLIGENCE:**
+```python
+class IntelligentRateLimit:
+    """Smart rate limiting based on 5-day testing patterns"""
+    
+    def __init__(self):
+        self.account_timers = {}
+        self.global_flood_wait = {}
+        self.account_penalties = {}
+    
+    async def can_execute(self, account_id: str, operation_type: str) -> bool:
+        """Intelligent rate limiting with operation-specific delays"""
+        now = time.time()
+        
+        # Check global flood wait
+        if operation_type in self.global_flood_wait:
+            if now < self.global_flood_wait[operation_type]:
+                return False
+        
+        # Check account-specific timing
+        account_key = f"{account_id}_{operation_type}"
+        if account_key in self.account_timers:
+            # Different delays for different operations
+            required_delay = {
+                'join_channel': 3,
+                'leave_channel': 2,
+                'boost_views': 5,
+                'send_reaction': 4,
+                'join_call': 10  # Longer delay for live calls
+            }.get(operation_type, 3)
+            
+            if now - self.account_timers[account_key] < required_delay:
+                return False
+        
+        # Apply penalty system for problematic accounts
+        if account_id in self.account_penalties:
+            penalty_multiplier = self.account_penalties[account_id]
+            if penalty_multiplier > 1:
+                await asyncio.sleep(penalty_multiplier)
+        
+        self.account_timers[account_key] = now
+        return True
+    
+    async def handle_flood_wait(self, operation_type: str, wait_seconds: int):
+        """Handle FloodWait with global operation blocking"""
+        end_time = time.time() + wait_seconds + 1  # 1 second buffer
+        self.global_flood_wait[operation_type] = end_time
+        logger.warning(f"Global FloodWait for {operation_type}: {wait_seconds}s")
+```
+
+5. **SESSION CORRUPTION DETECTION:**
+```python
+class SessionValidator:
+    """Session validation based on 5-day corruption patterns"""
+    
+    @staticmethod
+    async def validate_session_integrity(session_path: str) -> Dict[str, Any]:
+        """Comprehensive session validation"""
+        try:
+            if not os.path.exists(session_path):
+                return {"valid": False, "reason": "File does not exist"}
+            
+            # Check file size (corrupted sessions are usually < 100 bytes)
+            file_size = os.path.getsize(session_path)
+            if file_size < 100:
+                return {"valid": False, "reason": f"File too small: {file_size} bytes"}
+            
+            # Try to read session headers
+            with open(session_path, 'rb') as f:
+                header = f.read(16)
+                if len(header) < 16:
+                    return {"valid": False, "reason": "Invalid header"}
+            
+            # Try to create client (without connecting)
+            try:
+                test_client = TelegramClient(session_path.replace('.session', '_test'), 
+                                           api_id=12345, api_hash='test')
+                test_client.session.close()
+                return {"valid": True, "size": file_size}
+            except Exception as e:
+                return {"valid": False, "reason": f"Client creation failed: {e}"}
+                
+        except Exception as e:
+            return {"valid": False, "reason": f"Validation error: {e}"}
+```
+
+==============================================================================
+IMPLEMENTATION SEQUENCE (REFINED)
+==============================================================================
+
+PHASE 1 - Foundation & Windows Setup:
+1. Configure Windows compatibility layer
+2. Create project structure with safe path handling
+3. Set up external PostgreSQL with override system
+4. Implement universal pagination and batch management
+5. Create basic bot framework with Aiogram
+
+PHASE 2 - Core Features with Batch Loading:
+1. Channel Management with 100-item batch loading
+2. Account Management with batch processing
+3. Universal error handling implementation
+4. System Health monitoring with memory optimization
+
+PHASE 3 - Advanced Features with Rate Limiting:
+1. View Manager with intelligent rate limiting
+2. Analytics with batch processing for large datasets
+3. Emoji Reactions with flood wait handling
+4. Poll Manager with session validation
+
+PHASE 4 - Live Management (Production-Ready):
+1. Resilient Telethon client setup
+2. Group call joining with fresh call info handling
+3. WebRTC audio loop with connection monitoring
+4. Enterprise retry queue with exponential backoff
+5. Memory leak prevention and resource cleanup
+
+PHASE 5 - Production Optimization:
+1. Automated schema compatibility checking
+2. Session corruption detection and recovery
+3. Performance monitoring with batch optimization
+4. Comprehensive error tracking and alerting
+
+==============================================================================
+SPECIAL REQUIREMENTS
+==============================================================================
+
+1. AUDIO LOOP IMPLEMENTATION:
+   - Create 1-second silent OGG audio file
+   - Loop this file continuously during live streams
+   - Handle audio stream interruptions
+   - Monitor audio quality and connection
+
+2. TELEGRAM CLIENT ISOLATION:
+   - Each account runs in separate Telethon instance
+   - Independent connection handling
+   - Isolated error handling per account
+   - Session file management
+
+3. REAL-TIME MONITORING:
+   - Live stream detection (every 30 seconds)
+   - Account health monitoring
+   - Connection status tracking
+   - Automatic recovery systems
+
+4. ENTERPRISE-GRADE RETRY SYSTEM:
+   - Never-give-up retry strategy
+   - Background worker queues
+   - Jitter implementation
+   - Self-healing capabilities
+
+==============================================================================
+SUCCESS METRICS
+==============================================================================
+
+1. Account Join Success Rate: >80%
+2. Live Stream Detection: <30 seconds
+3. View Boost Accuracy: >95%
+4. System Uptime: >99%
+5. Database Response Time: <100ms
+6. Memory Usage: <1GB
+7. CPU Usage: <50% under normal load
+
+==============================================================================
+FINAL NOTES
+==============================================================================
+
+This bot is designed as an enterprise-grade solution with:
+- Fault tolerance and automatic recovery
+- Scalable architecture for handling multiple accounts
+- Comprehensive error handling and logging
+- Real-time monitoring and alerting
+- Advanced retry mechanisms
+- Production-ready database management
+
+The live management feature is the most complex component, requiring careful implementation of Telethon group call joining, WebRTC audio streaming, and continuous connection monitoring.
+
+All components must work together seamlessly to provide a robust, reliable, and efficient Telegram channel management solution.
+
+REMEMBER: Always use external PostgreSQL database, never Replit's built-in database.
