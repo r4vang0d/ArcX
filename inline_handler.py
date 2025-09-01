@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 
 from aiogram import Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 
 from core.config.config import Config
 from core.database.unified_database import DatabaseManager
@@ -29,7 +30,7 @@ class InlineHandler:
         self.handlers[prefix] = handler
         logger.info(f"✅ Registered inline handler for prefix: {prefix}")
     
-    async def handle_callback(self, callback: CallbackQuery):
+    async def handle_callback(self, callback: CallbackQuery, state: FSMContext):
         """Route callback to appropriate handler based on prefix"""
         try:
             callback_data = callback.data
@@ -46,7 +47,7 @@ class InlineHandler:
             for prefix, handler in self.handlers.items():
                 if callback_data.startswith(prefix):
                     if hasattr(handler, 'handle_callback'):
-                        await handler.handle_callback(callback)
+                        await handler.handle_callback(callback, state)
                         return
             
             # Handle unknown callbacks
