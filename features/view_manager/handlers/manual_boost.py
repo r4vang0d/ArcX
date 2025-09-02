@@ -198,7 +198,7 @@ Select a channel for quick boost:
                 """
                 SELECT vbc.*, c.title as channel_title, c.username as channel_username
                 FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
+                JOIN telegram_channels c ON vbc.channel_id = c.id
                 WHERE vbc.user_id = $1 AND vbc.campaign_type = 'manual'
                 ORDER BY vbc.created_at DESC
                 LIMIT 15
@@ -534,7 +534,7 @@ Recent posts available for boosting:
             if message_link:
                 # Find channel by name
                 channel = await self.db.fetch_one(
-                    "SELECT * FROM channels WHERE user_id = $1 AND username = $2",
+                    "SELECT * FROM telegram_channels WHERE user_id = $1 AND username = $2",
                     user_id, message_link['channel_name']
                 )
                 if not channel:

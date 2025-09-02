@@ -515,7 +515,7 @@ class AnalyticsHandler:
                 """
                 SELECT COALESCE(SUM(current_views), 0) as total
                 FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
+                JOIN telegram_channels c ON vbc.channel_id = c.id
                 WHERE vbc.user_id = $1
                 """,
                 user_id
@@ -742,7 +742,7 @@ class AnalyticsHandler:
         try:
             # Get basic counts
             channels_count = await self.db.fetch_one(
-                "SELECT COUNT(*) as count FROM channels WHERE user_id = $1 AND is_active = TRUE",
+                "SELECT COUNT(*) as count FROM telegram_channels WHERE user_id = $1 AND is_active = TRUE",
                 user_id
             )
             

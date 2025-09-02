@@ -368,7 +368,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 channels_to_monitor = await self.db.fetch_all(
                     """
                     SELECT c.*, u.settings
-                    FROM channels c
+                    FROM telegram_channels c
                     JOIN users u ON c.user_id = u.user_id
                     WHERE c.is_active = TRUE AND u.is_active = TRUE
                     """
@@ -497,7 +497,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 SELECT COUNT(*) as count
                 FROM live_stream_participants lsp
                 JOIN live_streams ls ON lsp.stream_id = ls.id
-                JOIN channels c ON ls.channel_id = c.id
+                JOIN telegram_channels c ON ls.channel_id = c.id
                 WHERE u.user_id = $1 AND lsp.joined_at >= DATE(NOW())
                 """,
                 user_id
@@ -529,7 +529,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                 """
                 SELECT ls.*, c.title as channel_title, c.username as channel_username
                 FROM live_streams ls
-                JOIN channels c ON ls.channel_id = c.id
+                JOIN telegram_channels c ON ls.channel_id = c.id
                 WHERE u.user_id = $1 AND ls.is_active = TRUE
                 ORDER BY ls.start_time DESC
                 """,
@@ -568,7 +568,7 @@ Configure how the bot joins and behaves in live streams and voice chats.
                     COUNT(DISTINCT lsp.id) as joins_attempted,
                     COUNT(DISTINCT CASE WHEN lsp.is_active THEN lsp.id END) as successful_joins
                 FROM live_streams ls
-                JOIN channels c ON ls.channel_id = c.id
+                JOIN telegram_channels c ON ls.channel_id = c.id
                 LEFT JOIN live_stream_participants lsp ON ls.id = lsp.stream_id
                 WHERE u.user_id = $1 AND ls.start_time >= DATE(NOW())
                 """,

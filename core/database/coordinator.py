@@ -171,7 +171,7 @@ class DatabaseCoordinator:
                 
                 # Channels table
                 """
-                CREATE TABLE IF NOT EXISTS channels (
+                CREATE TABLE IF NOT EXISTS telegram_channels (
                     id SERIAL PRIMARY KEY,
                     user_id BIGINT REFERENCES users(user_id),
                     channel_id BIGINT UNIQUE NOT NULL,
@@ -192,7 +192,7 @@ class DatabaseCoordinator:
                 CREATE TABLE IF NOT EXISTS view_boost_campaigns (
                     id SERIAL PRIMARY KEY,
                     user_id BIGINT REFERENCES users(user_id),
-                    channel_id INTEGER REFERENCES channels(id),
+                    channel_id INTEGER REFERENCES telegram_channels(id),
                     message_id BIGINT NOT NULL,
                     target_views INTEGER NOT NULL,
                     current_views INTEGER DEFAULT 0,
@@ -223,7 +223,7 @@ class DatabaseCoordinator:
                 """
                 CREATE TABLE IF NOT EXISTS live_streams (
                     id SERIAL PRIMARY KEY,
-                    channel_id INTEGER REFERENCES channels(id),
+                    channel_id INTEGER REFERENCES telegram_channels(id),
                     stream_id BIGINT NOT NULL,
                     title VARCHAR(255),
                     is_active BOOLEAN DEFAULT TRUE,
@@ -254,7 +254,7 @@ class DatabaseCoordinator:
                 CREATE TABLE IF NOT EXISTS emoji_reactions (
                     id SERIAL PRIMARY KEY,
                     user_id BIGINT REFERENCES users(user_id),
-                    channel_id INTEGER REFERENCES channels(id),
+                    channel_id INTEGER REFERENCES telegram_channels(id),
                     message_id BIGINT NOT NULL,
                     emoji VARCHAR(50) NOT NULL,
                     reaction_count INTEGER DEFAULT 0,

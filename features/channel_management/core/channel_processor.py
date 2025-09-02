@@ -197,7 +197,7 @@ class ChannelProcessor:
                     logger.warning(f"Channel {channel['channel_id']} became private")
                     # Mark channel as inactive
                     await self.db.execute_query(
-                        "UPDATE channels SET is_active = FALSE WHERE id = $1",
+                        "UPDATE telegram_channels SET is_active = FALSE WHERE id = $1",
                         channel_id
                     )
                     break
@@ -239,7 +239,7 @@ class ChannelProcessor:
             except ChannelPrivateError:
                 # Channel is no longer accessible
                 await self.db.execute_query(
-                    "UPDATE channels SET is_active = FALSE WHERE id = $1",
+                    "UPDATE telegram_channels SET is_active = FALSE WHERE id = $1",
                     channel_id
                 )
                 
@@ -348,7 +348,7 @@ class ChannelProcessor:
             inactive_channels = await self.db.fetch_all(
                 """
                 SELECT c.id, c.title, c.user_id
-                FROM channels c
+                FROM telegram_channels c
                 LEFT JOIN view_boost_campaigns vbc ON c.id = vbc.channel_id 
                     AND vbc.created_at > $1
                 WHERE c.updated_at < $1 
@@ -362,7 +362,7 @@ class ChannelProcessor:
             for channel in inactive_channels:
                 # Mark as inactive instead of deleting
                 await self.db.execute_query(
-                    "UPDATE channels SET is_active = FALSE, updated_at = NOW() WHERE id = $1",
+                    "UPDATE telegram_channels SET is_active = FALSE, updated_at = NOW() WHERE id = $1",
                     channel['id']
                 )
                 

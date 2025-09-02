@@ -141,7 +141,7 @@ Select channels to enable auto boosting:
                 """
                 SELECT vbc.*, c.title as channel_title, c.username as channel_username
                 FROM view_boost_campaigns vbc
-                JOIN channels c ON vbc.channel_id = c.id
+                JOIN telegram_channels c ON vbc.channel_id = c.id
                 WHERE vbc.user_id = $1 AND vbc.campaign_type = 'auto'
                 ORDER BY vbc.created_at DESC
                 LIMIT 10
@@ -296,7 +296,7 @@ Select channels to enable auto boosting:
                     """
                     SELECT vbc.*, vbc.channel_id as telegram_channel_id, vbc.user_id
                     FROM view_boost_campaigns vbc
-                    JOIN channels c ON vbc.channel_id = c.id
+                    JOIN telegram_channels c ON vbc.channel_id = c.id
                     WHERE vbc.campaign_type = 'auto' AND vbc.status = 'active'
                     AND vbc.updated_at < NOW() - INTERVAL '5 minutes'
                     LIMIT 10

@@ -182,7 +182,7 @@ class BoostScheduler:
                     """
                     SELECT vbc.*, c.title as channel_title
                     FROM view_boost_campaigns vbc
-                    JOIN channels c ON vbc.channel_id = c.id
+                    JOIN telegram_channels c ON vbc.channel_id = c.id
                     WHERE vbc.user_id = $1 AND vbc.status = 'scheduled'
                     ORDER BY vbc.start_time ASC
                     """,
@@ -193,7 +193,7 @@ class BoostScheduler:
                     """
                     SELECT vbc.*, c.title as channel_title
                     FROM view_boost_campaigns vbc
-                    JOIN channels c ON vbc.channel_id = c.id
+                    JOIN telegram_channels c ON vbc.channel_id = c.id
                     WHERE vbc.status = 'scheduled'
                     ORDER BY vbc.start_time ASC
                     """

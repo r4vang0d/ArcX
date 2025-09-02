@@ -171,7 +171,7 @@ Select how to configure reactions:
                 """
                 SELECT er.*, c.title as channel_title
                 FROM emoji_reactions er
-                JOIN channels c ON er.channel_id = c.id
+                JOIN telegram_channels c ON er.channel_id = c.id
                 WHERE er.user_id = $1 AND er.auto_react_enabled = TRUE
                 ORDER BY er.created_at DESC
                 """,
@@ -435,7 +435,7 @@ Select how to use this emoji set:
                 active_channels = await self.db.fetch_all(
                     """
                     SELECT DISTINCT c.id, er.channel_id, er.user_id, c.title
-                    FROM channels c
+                    FROM telegram_channels c
                     JOIN emoji_reactions er ON c.id = er.channel_id
                     WHERE er.auto_react_enabled = TRUE
                     """
@@ -601,7 +601,7 @@ Select how to use this emoji set:
             active_channels = await self.db.fetch_one(
                 """
                 SELECT COUNT(DISTINCT c.id) as count
-                FROM channels c
+                FROM telegram_channels c
                 JOIN emoji_reactions er ON c.id = er.channel_id
                 WHERE er.user_id = $1 AND er.auto_react_enabled = TRUE
                 """,
@@ -687,7 +687,7 @@ Select how to use this emoji set:
                 """
                 SELECT c.title, SUM(er.reaction_count) as reactions
                 FROM emoji_reactions er
-                JOIN channels c ON er.channel_id = c.id
+                JOIN telegram_channels c ON er.channel_id = c.id
                 WHERE er.user_id = $1
                 GROUP BY c.id, c.title
                 ORDER BY reactions DESC
