@@ -135,8 +135,14 @@ class DatabaseCoordinator:
                 db_name = await conn.fetchval("SELECT current_database()")
                 logger.info(f"📋 Creating schema in database: {db_name}")
             
-            # Clear existing schema first
-            await self._clear_existing_schema()
+            # Only clear schema if explicitly requested (for development)
+            import os
+            clear_schema = os.getenv('CLEAR_DB_SCHEMA', 'false').lower() == 'true'
+            if clear_schema:
+                logger.warning("⚠️ CLEAR_DB_SCHEMA=true detected - clearing existing schema")
+                await self._clear_existing_schema()
+            else:
+                logger.info("✅ Preserving existing data - schema will be updated safely")
             
             schema_queries = [
                 # Users table
