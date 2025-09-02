@@ -117,6 +117,7 @@ class TelegramBotCore:
                 me = await temp_client.get_me()
                 
                 # Re-add the account to the database (let SERIAL generate ID)
+                # Note: user_id will be NULL initially and set when user first interacts
                 await self.db.execute_query(
                     """
                     INSERT INTO telegram_accounts 

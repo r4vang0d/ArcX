@@ -646,7 +646,11 @@ All data and session files have been cleaned up.
     
     # Helper methods
     async def _get_user_accounts(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get user's accounts"""
+        """Get user's accounts (including orphaned accounts from session recovery)"""
+        # First, try to claim any orphaned accounts (accounts with NULL user_id)
+        await self._claim_orphaned_accounts(user_id)
+        
+        # Then return user's accounts
         return await self.db.fetch_all(
             "SELECT * FROM telegram_accounts WHERE user_id = $1 ORDER BY created_at DESC",
             user_id
@@ -683,6 +687,17 @@ All data and session files have been cleaned up.
             [InlineKeyboardButton(text="[🔙 Account Manager]", callback_data="account_manager")],
             [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
         ])
+    
+    async def _claim_orphaned_accounts(self, user_id: int):
+        """Claim orphaned accounts from session recovery"""
+        try:
+            # Update orphaned accounts (user_id IS NULL) to belong to this user
+            await self.db.execute_query(
+                "UPDATE telegram_accounts SET user_id = $1 WHERE user_id IS NULL",
+                user_id
+            )
+        except Exception as e:
+            logger.error(f"Error claiming orphaned accounts: {e}")
     
     def _get_retry_keyboard(self) -> InlineKeyboardMarkup:
         """Get retry keyboard"""
