@@ -1,0 +1,29 @@
+2025-09-02 08:21:49,877 - telegram_bot - INFO - ✅ analytics routes registered
+2025-09-02 08:21:49,878 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-45' coro=<Connection._send_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/connection/connection.py:316> wait_for=<Future cancelled>>
+Exception ignored in: <coroutine object Connection._recv_loop at 0x7f6b98d5d3f0>
+Traceback (most recent call last):
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/enum.py", line 714, in __call__
+    return cls.__new__(cls, value)
+           ^^^^^^^^^^^
+RuntimeError: coroutine ignored GeneratorExit
+2025-09-02 08:21:49,878 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-46' coro=<Connection._recv_loop() running at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/connection/connection.py:361> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2025-09-02 08:21:49,878 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-47' coro=<MTProtoSender._send_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/mtprotosender.py:446> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2025-09-02 08:21:49,879 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-48' coro=<MTProtoSender._recv_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/mtprotosender.py:497> wait_for=<Future cancelled>>
+2025-09-02 08:21:49,879 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-52' coro=<Connection._send_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/connection/connection.py:316> wait_for=<Future cancelled>>
+Exception ignored in: <coroutine object Connection._recv_loop at 0x7f6b98d5f1f0>
+Traceback (most recent call last):
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/enum.py", line 714, in __call__
+    return cls.__new__(cls, value)
+           ^^^^^^^^^^^
+RuntimeError: coroutine ignored GeneratorExit
+2025-09-02 08:21:49,879 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-53' coro=<Connection._recv_loop() running at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/connection/connection.py:361> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2025-09-02 08:21:49,880 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-54' coro=<MTProtoSender._send_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/mtprotosender.py:446> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+2025-09-02 08:21:49,880 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-55' coro=<MTProtoSender._recv_loop() done, defined at /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/telethon/network/mtprotosender.py:497> wait_for=<Future cancelled>>

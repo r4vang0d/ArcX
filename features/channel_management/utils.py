@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 class ChannelValidator:
     """Channel validation and processing utilities"""
     
-    def __init__(self, bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
-        self.bot_core = TelegramBotCore(config, db_manager)
+        self.bot_core = bot_core if bot_core else TelegramBotCore(config, db_manager)
         
     async def validate_and_process_channel(self, user_id: int, channel_input: str) -> Dict[str, Any]:
         """Validate and process channel input"""

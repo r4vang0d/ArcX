@@ -47,6 +47,19 @@ class ViewManagerHandler:
             logger.error(f"Failed to initialize view manager handler: {e}")
             raise
     
+    async def shutdown(self):
+        """Shutdown view manager handler"""
+        try:
+            # Stop all boost engines
+            for engine_id, engine in self._boost_engines.items():
+                if hasattr(engine, 'stop'):
+                    await engine.stop()
+            
+            self._boost_engines.clear()
+            logger.info("✅ View manager handler shut down")
+        except Exception as e:
+            logger.error(f"Error during view manager shutdown: {e}")
+    
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""
         # FSM message handlers

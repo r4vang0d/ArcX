@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 class ChannelProcessor:
     """Core channel processing and management"""
     
-    def __init__(self, config: Config, db_manager: DatabaseManager):
+    def __init__(self, config: Config, db_manager: DatabaseManager, bot_core=None):
         self.config = config
         self.db = db_manager
-        self.bot_core = TelegramBotCore(config, db_manager)
+        self.bot_core = bot_core if bot_core else TelegramBotCore(config, db_manager)
         self._processing_queue = asyncio.Queue()
         self._workers = []
         self._running = False

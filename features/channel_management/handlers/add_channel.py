@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 class AddChannelHandler:
     """Handler for adding new channels"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
-        self.validator = ChannelValidator(bot, db_manager, config)
+        self.bot_core = bot_core
+        self.validator = ChannelValidator(bot, db_manager, config, bot_core)
         
     async def initialize(self):
         """Initialize add channel handler"""

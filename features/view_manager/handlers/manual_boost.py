@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 class ManualBoostHandler:
     """Handler for manual view boosting"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
-        self.bot_core = TelegramBotCore(config, db_manager)
+        self.bot_core = bot_core if bot_core else TelegramBotCore(config, db_manager)
         self._active_boosts = {}
         
     async def initialize(self):

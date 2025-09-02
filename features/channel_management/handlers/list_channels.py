@@ -21,10 +21,11 @@ logger = logging.getLogger(__name__)
 class ListChannelsHandler:
     """Handler for listing and managing channels"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
+        self.bot_core = bot_core
         self.universal_db = UniversalDatabaseAccess(db_manager)
         
     async def initialize(self):
@@ -367,7 +368,7 @@ class ListChannelsHandler:
             # Queue refresh tasks (if channel processor is available)
             try:
                 from ..core.channel_processor import ChannelProcessor
-                processor = ChannelProcessor(self.config, self.db)
+                processor = ChannelProcessor(self.config, self.db, self.bot_core)
                 await processor.queue_batch_refresh(user_id)
                 
                 message = f"✅ Refresh queued for {len(channels)} channels. Updates will appear shortly."
