@@ -304,21 +304,49 @@ API credentials saved! Now please send your phone number:
                 'unique_id': account_uuid
             })
             
-            # Send verification code (simulate - in real implementation would use Telethon)
-            text = f"""🔥 <b>ArcX | Verification Code</b>
+            # Actually send verification code using Telethon
+            try:
+                from telethon import TelegramClient
+                
+                # Create temporary client to send OTP
+                temp_client = TelegramClient(
+                    f"sessions/temp_{account_uuid}",
+                    api_data['api_id'],
+                    api_data['api_hash']
+                )
+                
+                await temp_client.connect()
+                
+                # Send verification code
+                sent_code = await temp_client.send_code_request(phone)
+                
+                # Store phone_code_hash for verification
+                self._pending_accounts[user_id]['phone_code_hash'] = sent_code.phone_code_hash
+                self._pending_accounts[user_id]['temp_client'] = temp_client
+                
+                text = f"""🔥 <b>ArcX | Verification Code</b>
 
-Verification code sent to: <code>{phone}</code>
+✅ Verification code sent to: <code>{phone}</code>
 
 Please enter the 5-digit code you received:
-            """
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
-                [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
-            ])
-            
-            await message.answer(text, reply_markup=keyboard)
-            await state.set_state(AccountStates.waiting_for_code)
+                """
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="[🔙 Back]", callback_data="am_add_account")],
+                    [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
+                ])
+                
+                await message.answer(text, reply_markup=keyboard)
+                await state.set_state(AccountStates.waiting_for_code)
+                
+            except Exception as otp_error:
+                logger.error(f"Failed to send OTP: {otp_error}")
+                await message.answer(
+                    f"❌ <b>Failed to Send OTP</b>\n\n"
+                    f"Error: {str(otp_error)}\n\n"
+                    f"Please check your phone number and try again.",
+                    reply_markup=self._get_retry_keyboard()
+                )
             
         except Exception as e:
             logger.error(f"Error handling phone input: {e}")
@@ -346,7 +374,47 @@ Please enter the 5-digit code you received:
                 )
                 return
             
-            # Update account as verified
+            # Actually verify the code with Telegram
+            try:
+                temp_client = account_data.get('temp_client')
+                phone_code_hash = account_data.get('phone_code_hash')
+                
+                if not temp_client or not phone_code_hash:
+                    await message.answer("❌ Session expired. Please start again.")
+                    await state.clear()
+                    return
+                
+                # Sign in with the verification code
+                user = await temp_client.sign_in(
+                    account_data['phone'], 
+                    code, 
+                    phone_code_hash=phone_code_hash
+                )
+                
+                # Save the session and update account
+                session_data = temp_client.session.save()
+                await self.db.execute_query(
+                    """
+                    UPDATE telegram_accounts 
+                    SET session_data = $2, username = $3, is_verified = TRUE, last_login = NOW(), updated_at = NOW()
+                    WHERE id = $1
+                    """,
+                    account_data['account_id'], session_data, user.username
+                )
+                
+                # Clean up temporary client
+                await temp_client.disconnect()
+                
+            except Exception as verification_error:
+                logger.error(f"Verification failed: {verification_error}")
+                await message.answer(
+                    "❌ <b>Invalid Verification Code</b>\\n\\n"
+                    "Please check the code and try again.",
+                    reply_markup=self._get_retry_keyboard()
+                )
+                return
+            
+            # Update account as verified (fallback if Telegram verification worked)
             await self.db.execute_query(
                 """
                 UPDATE telegram_accounts 
@@ -378,6 +446,13 @@ Account is ready for use in all operations!
             
             # Cleanup
             if user_id in self._pending_accounts:
+                # Clean up temp client if it exists
+                temp_client = self._pending_accounts[user_id].get('temp_client')
+                if temp_client:
+                    try:
+                        await temp_client.disconnect()
+                    except:
+                        pass
                 del self._pending_accounts[user_id]
             await state.clear()
             
