@@ -97,6 +97,12 @@ class LiveManagementHandler:
                 await self._handle_active_streams(callback, state)
             elif callback_data == "lm_stream_history":
                 await self._handle_stream_history(callback, state)
+            elif callback_data == "lm_select_channels":
+                await self._handle_select_channels(callback, state)
+            elif callback_data == "lm_start_monitoring":
+                await self._handle_start_monitoring(callback, state)
+            elif callback_data == "lm_stop_monitoring":
+                await self._handle_stop_monitoring(callback, state)
             elif callback_data.startswith("lm_stream_"):
                 await self._handle_specific_stream(callback, state)
             # Auto-join handlers
@@ -713,6 +719,121 @@ Configure how the bot joins and behaves in live streams and voice chats.
     
     async def _handle_live_export_scan(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer("🚧 Export scan coming soon", show_alert=True)
+    
+    async def _handle_select_channels(self, callback: CallbackQuery, state: FSMContext):
+        """Handle select channels for live monitoring"""
+        try:
+            user_id = callback.from_user.id
+            
+            # Get user channels
+            channels = await self.db.get_user_channels(user_id)
+            if not channels:
+                await callback.message.edit_text(
+                    "📭 <b>No Channels Available</b>\n\n"
+                    "Please add channels first before selecting them for live monitoring.",
+                    reply_markup=self.keyboards.get_no_channels_keyboard()
+                )
+                return
+            
+            text = "⚙️ <b>Select Channels for Live Monitoring</b>\n\n"
+            text += "Choose channels to monitor for live streams and voice chats:\n\n"
+            
+            for i, channel in enumerate(channels[:10], 1):
+                status = "✅" if channel.get('monitoring_enabled', False) else "❌"
+                text += f"{status} {i}. {channel['title']}\n"
+            
+            text += "\n📋 Select channels to enable/disable monitoring:"
+            
+            keyboard = self.keyboards.get_channel_selection_keyboard(channels[:10])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+            await callback.answer("⚙️ Channel selection loaded")
+            
+        except Exception as e:
+            logger.error(f"Error in select channels: {e}")
+            await callback.answer("❌ Failed to load channel selection", show_alert=True)
+    
+    async def _handle_start_monitoring(self, callback: CallbackQuery, state: FSMContext):
+        """Handle start monitoring command"""
+        try:
+            user_id = callback.from_user.id
+            
+            # Get user channels
+            channels = await self.db.get_user_channels(user_id)
+            if not channels:
+                await callback.answer("❌ No channels available for monitoring", show_alert=True)
+                return
+            
+            # Start monitoring for user channels
+            enabled_count = 0
+            for channel in channels:
+                if channel.get('monitoring_enabled', True):
+                    enabled_count += 1
+            
+            if enabled_count == 0:
+                await callback.answer("❌ No channels enabled for monitoring. Select channels first.", show_alert=True)
+                return
+            
+            # Update monitoring status in database
+            await self.db.update_user_monitoring_status(user_id, True)
+            
+            text = f"""
+▶️ <b>Live Monitoring Started</b>
+
+🎯 <b>Monitoring Status:</b>
+• Channels: {enabled_count} enabled
+• Status: 🟢 Active
+• Started: Now
+• Mode: Automatic detection
+
+⚡ <b>What's Being Monitored:</b>
+• Live video streams
+• Voice chats  
+• Audio calls
+• Screen sharing
+
+The system is now actively scanning your selected channels for live streams.
+You'll be notified when streams are detected and auto-join is available.
+            """
+            
+            await callback.message.edit_text(text, reply_markup=self.keyboards.get_monitor_keyboard())
+            await callback.answer("▶️ Live monitoring started!")
+            
+        except Exception as e:
+            logger.error(f"Error starting monitoring: {e}")
+            await callback.answer("❌ Failed to start monitoring", show_alert=True)
+    
+    async def _handle_stop_monitoring(self, callback: CallbackQuery, state: FSMContext):
+        """Handle stop monitoring command"""
+        try:
+            user_id = callback.from_user.id
+            
+            # Update monitoring status in database
+            await self.db.update_user_monitoring_status(user_id, False)
+            
+            text = """
+⏹️ <b>Live Monitoring Stopped</b>
+
+🎯 <b>Monitoring Status:</b>
+• Status: 🔴 Inactive
+• Stopped: Now
+• Mode: Manual only
+
+⚡ <b>What Was Stopped:</b>
+• Automatic stream detection
+• Live stream notifications
+• Auto-join functionality
+• Background scanning
+
+Live monitoring has been stopped. You can restart it anytime or use manual join options.
+            """
+            
+            await callback.message.edit_text(text, reply_markup=self.keyboards.get_monitor_keyboard())
+            await callback.answer("⏹️ Live monitoring stopped!")
+            
+        except Exception as e:
+            logger.error(f"Error stopping monitoring: {e}")
+            await callback.answer("❌ Failed to stop monitoring", show_alert=True)
     
     async def shutdown(self):
         """Shutdown live management handler"""

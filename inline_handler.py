@@ -47,30 +47,68 @@ class InlineHandler:
                 return
             
             # Route to specific handlers based on prefix
+            # Account Management callbacks
             if callback_data.startswith("am_"):
                 if "account_management" in self.handlers:
                     logger.info(f"🔄 ROUTING: Account Manager callback '{callback_data}'")
                     await self.handlers["account_management"].handle_callback(callback, state)
                     return
             
+            # Channel Management callbacks
             if callback_data.startswith("cm_"):
                 if "channel_management" in self.handlers:
                     logger.info(f"🔄 ROUTING: Channel Manager callback '{callback_data}'")
                     await self.handlers["channel_management"].handle_callback(callback, state)
                     return
             
+            # View Manager callbacks
             if callback_data.startswith("vm_"):
                 if "view_manager" in self.handlers:
                     logger.info(f"🔄 ROUTING: Views Manager callback '{callback_data}'")
                     await self.handlers["view_manager"].handle_callback(callback, state)
                     return
             
-            for prefix, handler in self.handlers.items():
-                if callback_data.startswith(prefix):
-                    logger.info(f"🔄 ROUTING: Callback '{callback_data}' routed to '{prefix}' handler")
-                    if hasattr(handler, 'handle_callback'):
-                        await handler.handle_callback(callback, state)
-                        return
+            # Live Management callbacks
+            if callback_data.startswith("lm_") or callback_data.startswith("aj_") or callback_data.startswith("mj_") or callback_data.startswith("vs_") or callback_data.startswith("ls_"):
+                if "live_management" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Live Manager callback '{callback_data}'")
+                    await self.handlers["live_management"].handle_callback(callback, state)
+                    return
+            
+            # Analytics callbacks
+            if callback_data.startswith("an_"):
+                if "analytics" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Analytics callback '{callback_data}'")
+                    await self.handlers["analytics"].handle_callback(callback, state)
+                    return
+            
+            # Emoji Reactions callbacks
+            if callback_data.startswith("er_"):
+                if "emoji_reaction" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Emoji Reactions callback '{callback_data}'")
+                    await self.handlers["emoji_reaction"].handle_callback(callback, state)
+                    return
+            
+            # System Health callbacks
+            if callback_data.startswith("sh_"):
+                if "system_health" in self.handlers:
+                    logger.info(f"🔄 ROUTING: System Health callback '{callback_data}'")
+                    await self.handlers["system_health"].handle_callback(callback, state)
+                    return
+            
+            # Poll Manager callbacks (using emoji reactions handler temporarily)
+            if callback_data.startswith("pm_"):
+                if "emoji_reaction" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Poll Manager callback '{callback_data}' to emoji reactions")
+                    await self.handlers["emoji_reaction"].handle_callback(callback, state)
+                    return
+            
+            # Auto Boost specific callbacks
+            if callback_data.startswith("ab_"):
+                if "view_manager" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Auto Boost callback '{callback_data}'")
+                    await self.handlers["view_manager"].handle_callback(callback, state)
+                    return
             
             # Handle unknown callbacks
             logger.warning(f"❓ UNKNOWN CALLBACK: '{callback_data}' from user {user_id}")
