@@ -218,6 +218,22 @@ class DatabaseCoordinator:
                 )
                 """,
                 
+                # Boost configurations table
+                """
+                CREATE TABLE IF NOT EXISTS boost_configs (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(user_id),
+                    channel_id INTEGER REFERENCES telegram_channels(id),
+                    is_enabled BOOLEAN DEFAULT TRUE,
+                    boost_count INTEGER DEFAULT 50,
+                    cooldown_minutes INTEGER DEFAULT 30,
+                    timing_messages JSONB DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(user_id, channel_id)
+                )
+                """,
+                
                 # View boost logs table
                 """
                 CREATE TABLE IF NOT EXISTS view_boost_logs (
