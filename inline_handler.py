@@ -33,6 +33,10 @@ class InlineHandler:
     async def handle_callback(self, callback: CallbackQuery, state: FSMContext):
         """Route callback to appropriate handler based on prefix"""
         try:
+            if callback.data is None:
+                logger.warning("Received callback without data")
+                return
+                
             callback_data = callback.data
             user_id = callback.from_user.id
             username = callback.from_user.username or "Unknown"
@@ -69,7 +73,9 @@ class InlineHandler:
                     return
             
             # Live Management callbacks
-            if callback_data.startswith("lm_") or callback_data.startswith("aj_") or callback_data.startswith("mj_") or callback_data.startswith("vs_") or callback_data.startswith("ls_"):
+            if (callback_data.startswith("lm_") or callback_data.startswith("aj_") or 
+                callback_data.startswith("mj_") or callback_data.startswith("vs_") or 
+                callback_data.startswith("ls_")):
                 if "live_manager" in self.handlers:
                     logger.info(f"🔄 ROUTING: Live Manager callback '{callback_data}'")
                     await self.handlers["live_manager"].handle_callback(callback, state)
@@ -154,7 +160,13 @@ class InlineHandler:
                 welcome_text = temp_bot._get_welcome_message(is_admin, username)
                 keyboard = temp_bot._get_main_keyboard(is_admin)
                 
-                await callback.message.edit_text(welcome_text, reply_markup=keyboard)
+                if (callback.message is not None and 
+                    hasattr(callback.message, 'edit_text') and 
+                    not isinstance(callback.message, type(None))):
+                    try:
+                        await callback.message.edit_text(welcome_text, reply_markup=keyboard)
+                    except Exception as e:
+                        logger.warning(f"Failed to edit message: {e}")
                 await callback.answer("🔄 Menu refreshed!")
                 logger.info(f"🤖 RESPONSE: Main menu refreshed for user {user_id}")
                 
@@ -165,8 +177,9 @@ class InlineHandler:
                 
             else:
                 # Route to feature handlers
-                logger.info(f"🎯 FEATURE ACCESS: User {user_id} accessing '{callback_data}' feature")
-                await self._route_to_feature(callback, callback_data)
+                if callback_data is not None:
+                    logger.info(f"🎯 FEATURE ACCESS: User {user_id} accessing '{callback_data}' feature")
+                    await self._route_to_feature(callback, callback_data)
                 
         except Exception as e:
             logger.error(f"❌ MAIN MENU ERROR: Error in main menu callback for user {callback.from_user.id}: {e}")
@@ -191,7 +204,13 @@ class InlineHandler:
             menu_text, menu_keyboard = await self._get_feature_menu(feature)
             
             logger.info(f"🤖 FEATURE RESPONSE: Sending '{feature_name}' menu to user {user_id}")
-            await callback.message.edit_text(menu_text, reply_markup=menu_keyboard)
+            if (callback.message is not None and 
+                hasattr(callback.message, 'edit_text') and 
+                not isinstance(callback.message, type(None))):
+                try:
+                    await callback.message.edit_text(menu_text, reply_markup=menu_keyboard)
+                except Exception as e:
+                    logger.warning(f"Failed to edit feature menu: {e}")
             await callback.answer(f"📋 {feature_name} loaded")
             
         except Exception as e:
@@ -337,7 +356,13 @@ class InlineHandler:
             [InlineKeyboardButton(text="[🔙 Back to Main]", callback_data="refresh_main")]
         ])
         
-        await callback.message.edit_text(help_text, reply_markup=keyboard)
+        if (callback.message is not None and 
+            hasattr(callback.message, 'edit_text') and 
+            not isinstance(callback.message, type(None))):
+            try:
+                await callback.message.edit_text(help_text, reply_markup=keyboard)
+            except Exception as e:
+                logger.warning(f"Failed to edit help menu: {e}")
         await callback.answer("📚 Help documentation loaded")
 
     async def _handle_unknown_callback(self, callback: CallbackQuery):

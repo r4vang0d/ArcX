@@ -76,6 +76,8 @@ class DatabaseCoordinator:
     async def _test_connection(self):
         """Test database connection"""
         try:
+            if self.pool is None:
+                raise RuntimeError("Database pool not initialized")
             async with self.pool.acquire() as conn:
                 result = await conn.fetchval("SELECT 1")
                 if result == 1:
@@ -94,6 +96,8 @@ class DatabaseCoordinator:
         try:
             logger.info("🗑️ Clearing existing database schema...")
             
+            if self.pool is None:
+                raise RuntimeError("Database pool not initialized")
             async with self.pool.acquire() as conn:
                 # Drop tables in reverse dependency order
                 drop_queries = [
@@ -124,6 +128,8 @@ class DatabaseCoordinator:
             logger.info("🔧 Starting database schema initialization...")
             
             # First check if we can access the database
+            if self.pool is None:
+                raise RuntimeError("Database pool not initialized")
             async with self.pool.acquire() as conn:
                 db_name = await conn.fetchval("SELECT current_database()")
                 logger.info(f"📋 Creating schema in database: {db_name}")

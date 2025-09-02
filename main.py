@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Main application entry point"""
+    db_manager = None
+    bot = None
     try:
         logger.info("🚀 Starting Telegram Channel Management Bot...")
         
@@ -62,9 +64,9 @@ async def main():
     finally:
         # Cleanup resources
         try:
-            if 'db_manager' in locals():
+            if db_manager is not None:
                 await db_manager.close()
-            if 'bot' in locals():
+            if bot is not None:
                 await bot.shutdown()
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
@@ -73,7 +75,12 @@ async def main():
 if __name__ == "__main__":
     # Set event loop policy for Windows compatibility
     if sys.platform.startswith('win'):
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        try:
+            if hasattr(asyncio, 'WindowsProactorEventLoopPolicy'):
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        except (AttributeError, ImportError):
+            # WindowsProactorEventLoopPolicy not available in all Python versions
+            pass
     
     # Run the bot
     try:

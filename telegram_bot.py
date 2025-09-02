@@ -57,7 +57,8 @@ class TelegramBot:
             
             # Initialize bot core for Telethon clients
             self.bot_core = TelegramBotCore(self.config, self.db_manager)
-            self.bot_core._shared = True  # Mark as shared instance
+            # Mark as shared instance using setattr to avoid type checker issues
+            setattr(self.bot_core, '_shared', True)
             await self.bot_core.initialize()
             
             # Initialize inline handler
@@ -78,6 +79,10 @@ class TelegramBot:
     async def _initialize_handlers(self):
         """Initialize all feature handlers in parallel for faster startup"""
         try:
+            # Ensure bot instance is available
+            if self.bot is None:
+                raise RuntimeError("Bot instance not initialized")
+                
             # Create all handler instances first (fast) - pass bot_core to handlers that need it
             self.handlers['channel_management'] = ChannelManagementHandler(
                 self.bot, self.db_manager, self.config, self.bot_core
@@ -127,6 +132,10 @@ class TelegramBot:
     def _register_routes(self):
         """Register all bot routes and handlers"""
         try:
+            # Ensure dispatcher is available
+            if self.dp is None:
+                raise RuntimeError("Dispatcher not initialized")
+                
             # Register start command
             self.dp.message.register(self._start_command, CommandStart())
             self.dp.message.register(self._help_command, Command("help"))
@@ -161,6 +170,10 @@ class TelegramBot:
     async def _start_command(self, message: Message):
         """Handle /start command"""
         try:
+            if message.from_user is None:
+                logger.warning("Received message without user information")
+                return
+                
             user_id = message.from_user.id
             username = message.from_user.username or "Unknown"
             
@@ -194,6 +207,10 @@ class TelegramBot:
     
     async def _help_command(self, message: Message):
         """Handle /help command"""
+        if message.from_user is None:
+            logger.warning("Received help command without user information")
+            return
+            
         user_id = message.from_user.id
         username = message.from_user.username or "Unknown"
         
@@ -321,6 +338,9 @@ This bot is for authorized users only.
     async def start(self):
         """Start the bot"""
         try:
+            if self.dp is None or self.bot is None:
+                raise RuntimeError("Bot or dispatcher not initialized")
+                
             logger.info("🎯 Starting bot polling...")
             await self.dp.start_polling(self.bot)
         except Exception as e:

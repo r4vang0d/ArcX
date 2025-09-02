@@ -58,8 +58,8 @@ class DatabaseManager:
         return await self.coordinator.fetch_all(query, *args)
     
     # User Management Operations
-    async def create_user(self, user_id: int, username: str = None, first_name: str = None, 
-                         last_name: str = None, is_admin: bool = False) -> bool:
+    async def create_user(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None, 
+                         last_name: Optional[str] = None, is_admin: bool = False) -> bool:
         """Create or update user"""
         try:
             await self.execute_query(
@@ -111,7 +111,7 @@ class DatabaseManager:
     
     # Telegram Account Management
     async def add_telegram_account(self, user_id: int, phone_number: str, 
-                                  api_id: int, api_hash: str, unique_id: str = None) -> Optional[int]:
+                                  api_id: int, api_hash: str, unique_id: Optional[str] = None) -> Optional[int]:
         """Add new Telegram account"""
         try:
             # Generate unique_id if not provided
@@ -177,8 +177,8 @@ class DatabaseManager:
             return False
     
     # Channel Management
-    async def add_channel(self, user_id: int, channel_id: int, username: str = None,
-                         title: str = None, description: str = None) -> Optional[int]:
+    async def add_channel(self, user_id: int, channel_id: int, username: Optional[str] = None,
+                         title: Optional[str] = None, description: Optional[str] = None) -> Optional[int]:
         """Add new channel"""
         try:
             db_channel_id = await self.execute_query(
@@ -223,8 +223,8 @@ class DatabaseManager:
             channel_id
         )
     
-    async def update_channel_info(self, channel_db_id: int, title: str = None, 
-                                 description: str = None, member_count: int = None) -> bool:
+    async def update_channel_info(self, channel_db_id: int, title: Optional[str] = None, 
+                                 description: Optional[str] = None, member_count: Optional[int] = None) -> bool:
         """Update channel information"""
         try:
             updates = []
@@ -280,7 +280,7 @@ class DatabaseManager:
             logger.error(f"Failed to create view boost campaign: {e}")
             return None
     
-    async def get_user_campaigns(self, user_id: int, status: str = None) -> List[Dict[str, Any]]:
+    async def get_user_campaigns(self, user_id: int, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get user's view boost campaigns"""
         query = """
         SELECT vbc.*, c.title as channel_title, c.username as channel_username
@@ -288,9 +288,9 @@ class DatabaseManager:
         JOIN channels c ON vbc.channel_id = c.id
         WHERE vbc.user_id = $1
         """
-        params = [user_id]
+        params: List[Any] = [user_id]
         
-        if status:
+        if status is not None:
             query += " AND vbc.status = $2"
             params.append(status)
         
@@ -299,13 +299,13 @@ class DatabaseManager:
         return await self.fetch_all(query, *params)
     
     async def update_campaign_progress(self, campaign_id: int, current_views: int, 
-                                     status: str = None) -> bool:
+                                     status: Optional[str] = None) -> bool:
         """Update campaign progress"""
         try:
             updates = ["current_views = $2", "updated_at = NOW()"]
-            params = [campaign_id, current_views]
+            params: List[Any] = [campaign_id, current_views]
             
-            if status:
+            if status is not None:
                 updates.append("status = $3")
                 params.append(status)
             
@@ -318,7 +318,7 @@ class DatabaseManager:
             return False
     
     async def log_view_boost(self, campaign_id: int, account_id: int, views_added: int,
-                           success: bool, error_message: str = None) -> bool:
+                           success: bool, error_message: Optional[str] = None) -> bool:
         """Log view boost operation"""
         try:
             await self.execute_query(
@@ -337,7 +337,7 @@ class DatabaseManager:
     # Analytics Operations
     async def store_analytics_data(self, entity_type: str, entity_id: int, 
                                   metric_name: str, metric_value: float,
-                                  metadata: Dict[str, Any] = None) -> bool:
+                                  metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Store analytics data"""
         try:
             await self.execute_query(
@@ -353,11 +353,11 @@ class DatabaseManager:
             logger.error(f"Failed to store analytics data: {e}")
             return False
     
-    async def get_analytics_data(self, entity_type: str, entity_id: int = None,
-                               metric_name: str = None, limit: int = 1000) -> List[Dict[str, Any]]:
+    async def get_analytics_data(self, entity_type: str, entity_id: Optional[int] = None,
+                               metric_name: Optional[str] = None, limit: int = 1000) -> List[Dict[str, Any]]:
         """Get analytics data"""
         query = "SELECT * FROM analytics_data WHERE entity_type = $1"
-        params = [entity_type]
+        params: List[Any] = [entity_type]
         param_count = 2
         
         if entity_id is not None:
@@ -365,7 +365,7 @@ class DatabaseManager:
             params.append(entity_id)
             param_count += 1
         
-        if metric_name:
+        if metric_name is not None:
             query += f" AND metric_name = ${param_count}"
             params.append(metric_name)
             param_count += 1
@@ -377,7 +377,7 @@ class DatabaseManager:
     
     # System Operations
     async def log_system_event(self, log_level: str, module: str, message: str,
-                             metadata: Dict[str, Any] = None) -> bool:
+                             metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Log system event"""
         try:
             await self.execute_query(
@@ -392,19 +392,19 @@ class DatabaseManager:
             logger.error(f"Failed to log system event: {e}")
             return False
     
-    async def get_system_logs(self, log_level: str = None, module: str = None,
+    async def get_system_logs(self, log_level: Optional[str] = None, module: Optional[str] = None,
                             limit: int = 100) -> List[Dict[str, Any]]:
         """Get system logs"""
         query = "SELECT * FROM system_logs WHERE 1=1"
-        params = []
+        params: List[Any] = []
         param_count = 1
         
-        if log_level:
+        if log_level is not None:
             query += f" AND log_level = ${param_count}"
             params.append(log_level)
             param_count += 1
         
-        if module:
+        if module is not None:
             query += f" AND module = ${param_count}"
             params.append(module)
             param_count += 1
@@ -414,7 +414,7 @@ class DatabaseManager:
         
         return await self.fetch_all(query, *params)
     
-    async def cleanup_old_logs(self, days: int = None) -> int:
+    async def cleanup_old_logs(self, days: Optional[int] = None) -> int:
         """Cleanup old log entries"""
         if days is None:
             days = self.config.LOG_CLEANUP_DAYS
