@@ -116,16 +116,16 @@ class TelegramBotCore:
                 # Get user info from the session
                 me = await temp_client.get_me()
                 
-                # Re-add the account to the database
+                # Re-add the account to the database (let SERIAL generate ID)
                 await self.db.execute_query(
                     """
                     INSERT INTO telegram_accounts 
-                    (id, phone_number, api_id, api_hash, is_verified, is_active, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())
-                    ON CONFLICT (id) DO UPDATE SET
+                    (phone_number, api_id, api_hash, is_verified, is_active, created_at, updated_at)
+                    VALUES ($1, $2, $3, TRUE, TRUE, NOW(), NOW())
+                    ON CONFLICT (phone_number) DO UPDATE SET
                     is_verified = TRUE, is_active = TRUE, updated_at = NOW()
                     """,
-                    account_id, me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH
+                    me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH
                 )
                 
                 logger.info(f"🔄 RECOVERED: Session for account {me.phone} (ID: {account_id})")

@@ -111,16 +111,21 @@ class DatabaseManager:
     
     # Telegram Account Management
     async def add_telegram_account(self, user_id: int, phone_number: str, 
-                                  api_id: int, api_hash: str) -> Optional[int]:
+                                  api_id: int, api_hash: str, unique_id: str = None) -> Optional[int]:
         """Add new Telegram account"""
         try:
+            # Generate unique_id if not provided
+            if unique_id is None:
+                import uuid
+                unique_id = str(uuid.uuid4())[:8]
+                
             account_id = await self.execute_query(
                 """
-                INSERT INTO telegram_accounts (user_id, phone_number, api_id, api_hash, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, NOW(), NOW())
+                INSERT INTO telegram_accounts (user_id, phone_number, api_id, api_hash, unique_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
                 RETURNING id
                 """,
-                user_id, phone_number, api_id, api_hash
+                user_id, phone_number, api_id, api_hash, unique_id
             )
             return account_id
         except Exception as e:
