@@ -539,28 +539,15 @@ Account is ready for secure operations!
             health_score = await self._calculate_health_score(account)
             status = "🟢 Active" if account['is_active'] else "🔴 Inactive"
             
-            info_text = f"""📱 <b>Account Information</b>
+            info_text = f"""📱 Account Info
 
-<b>Basic Details:</b>
-• Phone: {account['phone_number']}
-• Unique ID: {account.get('unique_id', 'N/A')}
-• Username: @{account.get('username', 'None')}
-• Status: {status}
+Phone: {account['phone_number']}
+Status: {status}
+Health: {health_score}/100
+Verified: {"✅" if account['is_verified'] else "❌"}
 
-<b>Health & Performance:</b>
-• Health Score: {health_score}/100
-• Verified: {"✅ Yes" if account['is_verified'] else "❌ No"}
-• Last Login: {account.get('last_login', 'Never')}
-
-<b>Usage Statistics:</b>
-• Total Operations: {account.get('total_operations', 0)}
-• Success Rate: {account.get('success_rate', 0)}%
-• Rate Limit Status: {"🟢 Good" if account.get('rate_limit_ok', True) else "🔴 Limited"}
-
-<b>Technical Details:</b>
-• Added: {account['created_at'].strftime('%Y-%m-%d %H:%M')}
-• API Type: {"Default" if account['api_id'] == self.config.DEFAULT_API_ID else "Custom"}
-            """
+Added: {account['created_at'].strftime('%Y-%m-%d')}
+API: {"Default" if account['api_id'] == self.config.DEFAULT_API_ID else "Custom"}"""
             
             await callback.answer(info_text, show_alert=True)
             
