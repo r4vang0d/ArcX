@@ -78,21 +78,34 @@ class TelegramBotCore:
         """Recover session files that exist but aren't in the database"""
         try:
             import glob
-            session_files = glob.glob("sessions/account_*.session")
+            # Get all .session files (including temp sessions)
+            session_files = glob.glob("sessions/*.session")
             
             for session_file in session_files:
                 try:
-                    # Extract account ID from filename
-                    account_id = int(session_file.split('account_')[1].split('.session')[0])
+                    # Handle different session file name patterns
+                    filename = session_file.split('/')[-1].replace('.session', '')
                     
-                    # Check if account exists in database
-                    existing = await self.db.fetch_one(
-                        "SELECT id FROM telegram_accounts WHERE id = $1", account_id
-                    )
+                    if filename.startswith('account_'):
+                        # Standard account session
+                        account_id = int(filename.split('account_')[1])
+                    elif filename.startswith('temp_'):
+                        # Temporary session - extract phone from session if possible
+                        account_id = None  # Will be assigned during recovery
+                    else:
+                        logger.warning(f"Unknown session file format: {session_file}")
+                        continue
                     
-                    if not existing:
-                        # Session file exists but no database record - recover it
-                        await self._recover_session_from_file(account_id, session_file)
+                    # Check if this session is already in database (only for known account_id)
+                    if account_id:
+                        existing = await self.db.fetch_one(
+                            "SELECT id FROM telegram_accounts WHERE id = $1", account_id
+                        )
+                        if existing:
+                            continue  # Already in database
+                    
+                    # Session file exists but no database record - recover it
+                    await self._recover_session_from_file(session_file)
                         
                 except Exception as e:
                     logger.error(f"Error checking session file {session_file}: {e}")
@@ -100,7 +113,7 @@ class TelegramBotCore:
         except Exception as e:
             logger.error(f"Error recovering orphaned sessions: {e}")
     
-    async def _recover_session_from_file(self, account_id: int, session_file: str):
+    async def _recover_session_from_file(self, session_file: str):
         """Recover account data from existing session file"""
         try:
             # Try to connect with the session file to get account info
@@ -116,21 +129,25 @@ class TelegramBotCore:
                 # Get user info from the session
                 me = await temp_client.get_me()
                 
-                # Re-add the account to the database with username (let SERIAL generate ID)
+                # Re-add the account to the database with username and unique_id
                 # Note: user_id will be NULL initially and set when user first interacts
                 username = me.username if me.username else None
+                import uuid
+                unique_id = str(uuid.uuid4())
+                
+                # Insert or update the account in database
                 await self.db.execute_query(
                     """
                     INSERT INTO telegram_accounts 
-                    (phone_number, api_id, api_hash, username, is_verified, is_active, created_at, updated_at)
-                    VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())
+                    (phone_number, api_id, api_hash, username, unique_id, is_verified, is_active, session_data, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, '', NOW(), NOW())
                     ON CONFLICT (phone_number) DO UPDATE SET
-                    username = $4, is_verified = TRUE, is_active = TRUE, updated_at = NOW()
+                    username = $4, unique_id = $5, is_verified = TRUE, is_active = TRUE, updated_at = NOW()
                     """,
-                    me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH, username
+                    me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH, username, unique_id
                 )
                 
-                logger.info(f"🔄 RECOVERED: Session for account {me.phone} (ID: {account_id})")
+                logger.info(f"🔄 RECOVERED: Session for account {me.phone}")
                 
             await temp_client.disconnect()
             

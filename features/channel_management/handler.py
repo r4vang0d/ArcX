@@ -305,29 +305,24 @@ Channel is available for all bot features!
             # Get channel stats
             stats = await self._get_channel_stats(channel)
             
-            info_text = f"""📺 <b>Channel Information</b>
+            # Truncate long fields to avoid MESSAGE_TOO_LONG
+            title = (channel['channel_title'][:30] + '...') if len(channel['channel_title']) > 30 else channel['channel_title']
+            identifier = (channel['channel_identifier'][:25] + '...') if len(channel['channel_identifier']) > 25 else channel['channel_identifier']
+            
+            info_text = f"""📺 <b>ArcX | Channel Info</b>
 
-<b>Basic Details:</b>
-• Title: {channel['channel_title']}
+<b>Details:</b>
+• {title}
 • Type: {channel['channel_type'].title()}
-• Unique ID: {channel.get('unique_id', 'N/A')}
+• ID: {channel.get('unique_id', 'N/A')[:8]}
 • Status: {"✅ Active" if channel['is_active'] else "❌ Inactive"}
 
-<b>Channel Statistics:</b>
+<b>Stats:</b>
 • Members: {stats.get('member_count', 'Unknown')}
-• Total Views: {stats.get('total_views', 0)}
-• Avg. Views: {stats.get('avg_views', 0)}
-• Last Boosted: {stats.get('last_boost', 'Never')}
+• Views: {stats.get('total_views', 0)}
+• Operations: {stats.get('total_operations', 0)}
 
-<b>Performance:</b>
-• Success Rate: {stats.get('success_rate', 0)}%
-• Total Operations: {stats.get('total_operations', 0)}
-• Boost Count: {stats.get('boost_count', 0)}
-
-<b>Technical Details:</b>
-• Added: {channel['created_at'].strftime('%Y-%m-%d %H:%M')}
-• Identifier: {channel['channel_identifier']}
-• Original Link: {channel.get('original_link', 'N/A')}
+<b>Added:</b> {channel['created_at'].strftime('%Y-%m-%d')}
             """
             
             await callback.answer(info_text, show_alert=True)

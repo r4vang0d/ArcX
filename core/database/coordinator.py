@@ -106,6 +106,7 @@ class DatabaseCoordinator:
                     "DROP TABLE IF EXISTS emoji_reactions CASCADE",
                     "DROP TABLE IF EXISTS live_stream_participants CASCADE",
                     "DROP TABLE IF EXISTS view_boost_campaigns CASCADE",
+                    "DROP TABLE IF EXISTS channel_operations CASCADE",
                     "DROP TABLE IF EXISTS telegram_channels CASCADE",
                     "DROP TABLE IF EXISTS channels CASCADE", 
                     "DROP TABLE IF EXISTS telegram_accounts CASCADE",
@@ -286,6 +287,21 @@ class DatabaseCoordinator:
                     metric_value NUMERIC NOT NULL,
                     metadata JSONB DEFAULT '{}',
                     timestamp TIMESTAMP DEFAULT NOW()
+                )
+                """,
+                
+                # Channel operations table
+                """
+                CREATE TABLE IF NOT EXISTS channel_operations (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(user_id),
+                    channel_id INTEGER REFERENCES telegram_channels(id),
+                    operation_type VARCHAR(50) NOT NULL,
+                    account_count INTEGER DEFAULT 0,
+                    success BOOLEAN DEFAULT FALSE,
+                    details JSONB DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
                 )
                 """,
                 
