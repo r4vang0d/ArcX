@@ -27,6 +27,7 @@ from features.analytics.handler import AnalyticsHandler
 from features.account_management.handler import AccountManagementHandler
 from features.system_health.handler import SystemHealthHandler
 from features.live_management.handler import LiveManagementHandler
+from features.poll_manager.handler import PollManagerHandler
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,9 @@ class TelegramBot:
             self.handlers['live_management'] = LiveManagementHandler(
                 self.bot, self.db_manager, self.config, self.bot_core
             )
+            self.handlers['poll_manager'] = PollManagerHandler(
+                self.bot, self.db_manager, self.config, self.bot_core
+            )
             
             # Initialize all handlers in parallel (much faster)
             initialization_tasks = []
@@ -156,7 +160,7 @@ class TelegramBot:
             self.inline_handler.register_handler("account_manager", self.handlers['account_management'])
             self.inline_handler.register_handler("channel_manager", self.handlers['channel_management'])
             self.inline_handler.register_handler("views_manager", self.handlers['view_manager']) 
-            self.inline_handler.register_handler("poll_manager", self.handlers['emoji_reactions'])  # Temporary until poll manager is built
+            self.inline_handler.register_handler("poll_manager", self.handlers['poll_manager'])
             self.inline_handler.register_handler("live_manager", self.handlers['live_management'])
             self.inline_handler.register_handler("analytics", self.handlers['analytics'])
             self.inline_handler.register_handler("emoji_reaction", self.handlers['emoji_reactions'])

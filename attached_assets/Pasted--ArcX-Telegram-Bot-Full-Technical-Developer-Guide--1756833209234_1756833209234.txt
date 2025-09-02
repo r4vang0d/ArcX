@@ -1,0 +1,218 @@
+
+ArcX Telegram Bot â€“ Full Technical Developer Guide
+=================================================
+
+This document is a complete technical handbook for designing, implementing, and improving
+the ArcX Telegram Bot. It explains every part of the system: UI (frontend bot menus),
+backend (Python + Telethon logic), database schema, data flow, common problems, fixes,
+and scaling improvements. It is written like professional developer documentation.
+
+-----------------------------------------------------------------
+1. OVERVIEW
+-----------------------------------------------------------------
+ArcX is a multi-purpose Telegram automation bot that manages thousands of accounts and
+performs operations like boosting channel views, managing polls, joining lives, sending
+emoji reactions, and generating analytics.
+
+The architecture is divided into:
+- User Interface (Telegram inline keyboards and bot menus)
+- Backend Logic (Python + Telethon async tasks)
+- Database Layer (PostgreSQL with normalized schema)
+- Scaling & Error Handling
+
+-----------------------------------------------------------------
+2. USER INTERFACE (FRONTEND BOT MENUS)
+-----------------------------------------------------------------
+The bot communicates with users only through Telegram messages and inline keyboards.
+The design principle is simplicity: minimum buttons, intuitive flows, and clean menus.
+
+Main Menu (/start):
+-------------------------------------------------
+Welcome to ArcX ðŸš€
+Your automation hub for Telegram accounts, channels, boosting, polls, live, and analytics.
+
+[ Account Manager ]
+[ Channel Manager ]
+[ Views Manager ]
+[ Poll Manager ]
+[ Live Manager ]
+[ Emoji Reaction ]
+[ Analytics ]
+
+Each button opens a submenu. Example: Account Manager opens options for adding, removing,
+listing, and refreshing accounts.
+
+-----------------------------------------------------------------
+3. FEATURE BREAKDOWN (UI â†’ BACKEND â†’ DB â†’ TELETHON)
+-----------------------------------------------------------------
+
+3.1 ACCOUNT MANAGER
+-------------------------------------------------
+UI Buttons:
+[ Add Account ] [ Remove Account ] [ List Accounts ] [ Refresh Accounts ]
+
+Add Account Flow:
+1. User chooses Default API or Custom API.
+2. Provide phone number.
+3. Bot sends code (Telethon send_code_request).
+4. User enters code (sign_in).
+5. If 2FA, bot asks password.
+6. Session saved in DB.
+
+Database Entry:
+TELEGRAM_ACCOUNTS(user_id, unique_id, phone_number, api_id, api_hash, session_file, is_active, added_at)
+
+Telethon Methods:
+- client.send_code_request(phone)
+- client.sign_in(phone, code)
+- client.sign_in(password=...)
+- client.get_me()
+
+Fixes:
+- Handle PhoneCodeInvalidError
+- Encrypt session files
+- Retry login on flood waits
+
+Remove Account:
+- Delete from DB + delete .session file.
+
+List Accounts:
+- Show usernames with info (ID, active status, date).
+
+Refresh Accounts:
+- Re-scan DB and update cache.
+
+-------------------------------------------------
+3.2 CHANNEL MANAGER
+-------------------------------------------------
+UI Buttons:
+[ Add Channel ] [ Remove Channel ] [ List Channels ] [ Refresh Channels ]
+
+Add Channel Flow:
+1. User enters channel link.
+2. Normalize to channel_id.
+3. Store in DB.
+4. Accounts auto-join channel.
+
+DB: TELEGRAM_CHANNELS(user_id, unique_id, channel_id, channel_username, added_at)
+
+Telethon: JoinChannelRequest, GetFullChannelRequest
+
+Fixes:
+- Handle invite-only links
+- Use unique_id instead of raw channel ID
+
+-------------------------------------------------
+3.3 VIEWS MANAGER
+-------------------------------------------------
+UI Buttons:
+[ Auto Boost ] [ Manual Boost ]
+
+Auto Boost:
+- Select channels, configure per-channel boost rules (messages to monitor, views per message, spread time).
+- Background loop monitors new messages and applies views.
+
+Manual Boost:
+- User selects message and sets number of views.
+
+Telethon: client.view_messages(entity, ids)
+
+Fixes:
+- Use asyncio.create_task for loops
+- Rotate accounts on rate limits
+
+-------------------------------------------------
+3.4 POLL MANAGER
+-------------------------------------------------
+Flow:
+1. User pastes poll link.
+2. Bot shows options.
+3. User selects option, enters votes count.
+4. Accounts vote.
+
+Telethon: functions.messages.SendVoteRequest()
+
+Fixes:
+- One vote per account
+- Handle PollVoteRequiredError
+
+-------------------------------------------------
+3.5 LIVE MANAGER
+-------------------------------------------------
+Flow:
+- User selects channels to monitor.
+- When live detected, accounts auto-join.
+
+Telethon: JoinChannelRequest, functions.phone.JoinGroupCallRequest
+
+Fixes:
+- Manage per-session joins
+- Handle disconnections
+
+-------------------------------------------------
+3.6 EMOJI REACTION MANAGER
+-------------------------------------------------
+Flow:
+1. User selects message.
+2. Bot applies reactions with multiple accounts.
+
+Telethon: functions.messages.SendReactionRequest()
+
+Fixes:
+- Randomize emojis
+- Spread reactions over time
+
+-------------------------------------------------
+3.7 ANALYTICS DASHBOARD
+-------------------------------------------------
+UI Example:
+ðŸ“Š Analytics for @channel
+Views Added: 12,300
+Poll Votes: 2,400
+Live Joins: 950
+Emoji Reactions: 3,100
+
+DB: ANALYTICS_DATA(action_type, count, timestamp)
+
+Fixes:
+- Use indexes for faster queries
+- Archive old data weekly
+
+-----------------------------------------------------------------
+4. DATABASE DESIGN & FIXES
+-----------------------------------------------------------------
+Principles:
+- Use unique_id everywhere
+- Index frequently queried columns
+- Encrypt sensitive data
+
+Indexes:
+CREATE INDEX idx_accounts_user ON TELEGRAM_ACCOUNTS(user_id);
+CREATE INDEX idx_channels_user ON TELEGRAM_CHANNELS(user_id);
+CREATE INDEX idx_campaign_status ON VIEW_BOOST_CAMPAIGNS(status);
+
+-----------------------------------------------------------------
+5. UNIVERSAL FIXES
+-----------------------------------------------------------------
+- Run async engines for each task
+- Batch load accounts (rotate in sets of 100)
+- Retry failed Telethon requests
+- Store errors in SYSTEM_LOGS
+- Normalize Telegram links automatically
+
+-----------------------------------------------------------------
+6. SCALING IMPROVEMENTS
+-----------------------------------------------------------------
+- Horizontal scaling: multiple worker processes, 500 accounts each
+- Health checker: ping DB & Telegram API every 5 minutes
+- Smart cooldowns: random delays
+- User roles: Admin vs Regular user
+
+-----------------------------------------------------------------
+7. CONCLUSION
+-----------------------------------------------------------------
+ArcX bot is stable, scalable, and modular if implemented using this guide. Following
+these design principles ensures thousands of accounts can be managed safely with
+full automation across views, polls, live joins, and analytics.
+
+END OF DOCUMENT

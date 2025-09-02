@@ -102,11 +102,11 @@ class InlineHandler:
                     await self.handlers["system_health"].handle_callback(callback, state)
                     return
             
-            # Poll Manager callbacks (using emoji reactions handler temporarily)
+            # Poll Manager callbacks
             if callback_data.startswith("pm_"):
-                if "emoji_reaction" in self.handlers:
-                    logger.info(f"🔄 ROUTING: Poll Manager callback '{callback_data}' to emoji reactions")
-                    await self.handlers["emoji_reaction"].handle_callback(callback, state)
+                if "poll_manager" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Poll Manager callback '{callback_data}'")
+                    await self.handlers["poll_manager"].handle_callback(callback, state)
                     return
             
             # Auto Boost specific callbacks

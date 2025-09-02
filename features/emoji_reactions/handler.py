@@ -121,11 +121,7 @@ class EmojiReactionsHandler:
                 await self._handle_emoji_set_selection(callback, state)
             elif callback_data.startswith("er_enable_"):
                 await self._handle_enable_reactions(callback, state)
-            # Poll Manager callbacks (temporary routing)
-            elif callback_data == "pm_vote_poll":
-                await self._handle_vote_poll(callback, state)
-            elif callback_data == "pm_stats":
-                await self._handle_poll_stats(callback, state)
+            # Poll Manager callbacks moved to dedicated handler
             else:
                 await callback.answer("❌ Unknown reaction action", show_alert=True)
                 
