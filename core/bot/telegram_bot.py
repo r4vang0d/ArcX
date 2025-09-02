@@ -116,17 +116,18 @@ class TelegramBotCore:
                 # Get user info from the session
                 me = await temp_client.get_me()
                 
-                # Re-add the account to the database (let SERIAL generate ID)
+                # Re-add the account to the database with username (let SERIAL generate ID)
                 # Note: user_id will be NULL initially and set when user first interacts
+                username = me.username if me.username else None
                 await self.db.execute_query(
                     """
                     INSERT INTO telegram_accounts 
-                    (phone_number, api_id, api_hash, is_verified, is_active, created_at, updated_at)
-                    VALUES ($1, $2, $3, TRUE, TRUE, NOW(), NOW())
+                    (phone_number, api_id, api_hash, username, is_verified, is_active, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())
                     ON CONFLICT (phone_number) DO UPDATE SET
-                    is_verified = TRUE, is_active = TRUE, updated_at = NOW()
+                    username = $4, is_verified = TRUE, is_active = TRUE, updated_at = NOW()
                     """,
-                    me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH
+                    me.phone, self.config.DEFAULT_API_ID, self.config.DEFAULT_API_HASH, username
                 )
                 
                 logger.info(f"🔄 RECOVERED: Session for account {me.phone} (ID: {account_id})")

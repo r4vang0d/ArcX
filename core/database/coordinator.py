@@ -154,6 +154,7 @@ class DatabaseCoordinator:
                     id SERIAL PRIMARY KEY,
                     user_id BIGINT REFERENCES users(user_id),
                     phone_number VARCHAR(20) UNIQUE NOT NULL,
+                    username VARCHAR(255),
                     api_id INTEGER NOT NULL,
                     api_hash VARCHAR(255) NOT NULL,
                     unique_id VARCHAR(255) UNIQUE,
