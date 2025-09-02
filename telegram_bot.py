@@ -16,6 +16,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from core.config.config import Config
 from core.database.unified_database import DatabaseManager
+from core.bot.telegram_bot import TelegramBotCore
 from inline_handler import InlineHandler
 
 # Import all feature handlers
@@ -39,6 +40,7 @@ class TelegramBot:
         self.bot: Optional[Bot] = None
         self.dp: Optional[Dispatcher] = None
         self.handlers: Dict[str, Any] = {}
+        self.bot_core: Optional[TelegramBotCore] = None
         
     async def initialize(self):
         """Initialize bot and all handlers"""
@@ -52,6 +54,11 @@ class TelegramBot:
             # Initialize dispatcher with memory storage
             storage = MemoryStorage()
             self.dp = Dispatcher(storage=storage)
+            
+            # Initialize bot core for Telethon clients
+            self.bot_core = TelegramBotCore(self.config, self.db_manager)
+            self.bot_core._shared = True  # Mark as shared instance
+            await self.bot_core.initialize()
             
             # Initialize inline handler
             self.inline_handler = InlineHandler(self.bot, self.db_manager, self.config)
@@ -71,27 +78,27 @@ class TelegramBot:
     async def _initialize_handlers(self):
         """Initialize all feature handlers in parallel for faster startup"""
         try:
-            # Create all handler instances first (fast)
+            # Create all handler instances first (fast) - pass bot_core to handlers that need it
             self.handlers['channel_management'] = ChannelManagementHandler(
-                self.bot, self.db_manager, self.config
+                self.bot, self.db_manager, self.config, self.bot_core
             )
             self.handlers['view_manager'] = ViewManagerHandler(
-                self.bot, self.db_manager, self.config
+                self.bot, self.db_manager, self.config, self.bot_core
             )
             self.handlers['emoji_reactions'] = EmojiReactionsHandler(
-                self.bot, self.db_manager, self.config
+                self.bot, self.db_manager, self.config, self.bot_core
             )
             self.handlers['analytics'] = AnalyticsHandler(
                 self.bot, self.db_manager, self.config
             )
             self.handlers['account_management'] = AccountManagementHandler(
-                self.bot, self.db_manager, self.config
+                self.bot, self.db_manager, self.config, self.bot_core
             )
             self.handlers['system_health'] = SystemHealthHandler(
                 self.bot, self.db_manager, self.config
             )
             self.handlers['live_management'] = LiveManagementHandler(
-                self.bot, self.db_manager, self.config
+                self.bot, self.db_manager, self.config, self.bot_core
             )
             
             # Initialize all handlers in parallel (much faster)
@@ -329,6 +336,10 @@ This bot is for authorized users only.
             for handler_name, handler in self.handlers.items():
                 if hasattr(handler, 'shutdown'):
                     await handler.shutdown()
+            
+            # Shutdown bot core (Telethon clients)
+            if self.bot_core:
+                await self.bot_core.shutdown()
             
             # Close bot session
             if self.bot:

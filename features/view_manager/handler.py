@@ -29,10 +29,11 @@ class ViewBoostStates(StatesGroup):
 class ViewManagerHandler:
     """Simplified Views Manager with Auto Boost functionality"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
+        self.bot_core = bot_core
         self._boost_engines = {}  # Active boost monitoring engines
         self._pending_configs = {}  # Store temporary configs during setup
         

@@ -415,10 +415,13 @@ class TelegramBotCore:
         try:
             logger.info("⏹️ Shutting down all Telegram clients...")
             
-            # Disconnect all clients
+            # Disconnect all clients with proper task cleanup
             for account_id, client in self.clients.items():
                 try:
-                    await client.disconnect()
+                    if client.is_connected():
+                        await client.disconnect()
+                        # Give a small delay to allow proper cleanup
+                        await asyncio.sleep(0.1)
                 except Exception as e:
                     logger.error(f"Error disconnecting client {account_id}: {e}")
             

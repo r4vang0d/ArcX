@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 class LiveManagementHandler:
     """Main live stream management handler"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
         self.universal_db = UniversalDatabaseAccess(db_manager)
-        self.bot_core = TelegramBotCore(config, db_manager)
+        self.bot_core = bot_core if bot_core else TelegramBotCore(config, db_manager)
         self.keyboards = LiveManagementKeyboards()
         self.utils = LiveStreamUtils(bot, db_manager, config)
         
@@ -45,7 +45,9 @@ class LiveManagementHandler:
     async def initialize(self):
         """Initialize live management handler"""
         try:
-            await self.bot_core.initialize()
+            # Only initialize bot_core if it wasn't passed in (backward compatibility)
+            if hasattr(self, 'bot_core') and self.bot_core and not hasattr(self.bot_core, '_initialized'):
+                await self.bot_core.initialize()
             # Wait for database schema to be ready before starting monitoring
             await asyncio.sleep(15)
             await self._start_live_monitoring()
@@ -54,6 +56,27 @@ class LiveManagementHandler:
         except Exception as e:
             logger.error(f"Failed to initialize live management handler: {e}")
             raise
+    
+    async def shutdown(self):
+        """Shutdown live management handler"""
+        try:
+            self._running = False
+            
+            # Stop monitoring task
+            if self._monitoring_task and not self._monitoring_task.done():
+                self._monitoring_task.cancel()
+                try:
+                    await self._monitoring_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Shutdown bot_core if we own it
+            if hasattr(self, 'bot_core') and self.bot_core and not hasattr(self.bot_core, '_shared'):
+                await self.bot_core.shutdown()
+            
+            logger.info("✅ Live management handler shut down")
+        except Exception as e:
+            logger.error(f"Error during live management shutdown: {e}")
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""

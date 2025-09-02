@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 class EmojiReactionsHandler:
     """Handler for emoji reactions management"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
         self.universal_db = UniversalDatabaseAccess(db_manager)
-        self.bot_core = TelegramBotCore(config, db_manager)
+        self.bot_core = bot_core if bot_core else TelegramBotCore(config, db_manager)
         self._reaction_workers = []
         self._running = False
         
@@ -46,7 +46,9 @@ class EmojiReactionsHandler:
     async def initialize(self):
         """Initialize emoji reactions handler"""
         try:
-            await self.bot_core.initialize()
+            # Only initialize bot_core if it wasn't passed in (backward compatibility)
+            if hasattr(self, 'bot_core') and self.bot_core and not hasattr(self.bot_core, '_initialized'):
+                await self.bot_core.initialize()
             # Wait for database schema to be ready before starting workers  
             await asyncio.sleep(20)
             await self._start_reaction_workers()
@@ -55,6 +57,28 @@ class EmojiReactionsHandler:
         except Exception as e:
             logger.error(f"Failed to initialize emoji reactions handler: {e}")
             raise
+    
+    async def shutdown(self):
+        """Shutdown emoji reactions handler"""
+        try:
+            self._running = False
+            
+            # Stop all reaction workers
+            for worker in self._reaction_workers:
+                if not worker.done():
+                    worker.cancel()
+            
+            # Wait for workers to finish
+            if self._reaction_workers:
+                await asyncio.gather(*self._reaction_workers, return_exceptions=True)
+            
+            # Shutdown bot_core if we own it
+            if hasattr(self, 'bot_core') and self.bot_core and not hasattr(self.bot_core, '_shared'):
+                await self.bot_core.shutdown()
+            
+            logger.info("✅ Emoji reactions handler shut down")
+        except Exception as e:
+            logger.error(f"Error during emoji reactions shutdown: {e}")
     
     def register_handlers(self, dp: Dispatcher):
         """Register handlers with dispatcher"""

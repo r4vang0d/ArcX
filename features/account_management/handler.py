@@ -32,10 +32,11 @@ class AccountStates(StatesGroup):
 class AccountManagementHandler:
     """Simplified Account Manager according to user specifications"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
+        self.bot_core = bot_core
         self._pending_accounts = {}  # Store temporary account data during setup
         
     async def initialize(self):

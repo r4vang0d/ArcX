@@ -29,10 +29,11 @@ class ChannelStates(StatesGroup):
 class ChannelManagementHandler:
     """Simplified Channel Manager with universal link handler"""
     
-    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config):
+    def __init__(self, bot: Bot, db_manager: DatabaseManager, config: Config, bot_core=None):
         self.bot = bot
         self.db = db_manager
         self.config = config
+        self.bot_core = bot_core
         self._pending_channels = {}  # Store temporary channel data during setup
         
     async def initialize(self):
