@@ -1,0 +1,89 @@
+2025-09-02 03:38:01,267 - features.emoji_reactions.handler - INFO - ✅ Emoji reactions handlers registered
+2025-09-02 03:38:01,267 - telegram_bot - INFO - ✅ emoji_reactions routes registered
+2025-09-02 03:38:01,267 - features.analytics.handler - INFO - ✅ Analytics handlers registered
+2025-09-02 03:38:01,267 - telegram_bot - INFO - ✅ analytics routes registered
+2025-09-02 03:38:01,268 - features.account_management.handler - INFO - ✅ Account management handlers registered
+2025-09-02 03:38:01,268 - telegram_bot - INFO - ✅ account_management routes registered
+2025-09-02 03:38:01,268 - features.system_health.handler - INFO - ✅ System health handlers registered
+2025-09-02 03:38:01,268 - telegram_bot - INFO - ✅ system_health routes registered
+2025-09-02 03:38:01,268 - features.live_management.handler - INFO - ✅ Live management handlers registered
+2025-09-02 03:38:01,269 - telegram_bot - INFO - ✅ live_management routes registered
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: account_manager
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: channel_manager
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: views_manager
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: poll_manager
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: live_manager
+2025-09-02 03:38:01,269 - inline_handler - INFO - ✅ Registered inline handler for prefix: analytics
+2025-09-02 03:38:01,270 - inline_handler - INFO - ✅ Registered inline handler for prefix: emoji_reaction
+2025-09-02 03:38:01,270 - telegram_bot - INFO - ✅ All routes registered successfully
+2025-09-02 03:38:01,270 - telegram_bot - INFO - ✅ Bot initialization completed
+2025-09-02 03:38:01,270 - __main__ - INFO - ✅ Bot initialized successfully
+2025-09-02 03:38:01,270 - __main__ - INFO - 🎯 Bot is running and ready to serve!
+2025-09-02 03:38:01,270 - telegram_bot - INFO - 🎯 Starting bot polling...
+2025-09-02 03:38:01,271 - aiogram.dispatcher - INFO - Start polling
+2025-09-02 03:38:01,835 - aiogram.dispatcher - INFO - Run polling for bot @ravand3_bot id=8170403768 - '𓊈𒆜𝙋𝙞𝙧𝙖𝙩𝙚𒆜𓊉'
+2025-09-02 03:40:41,486 - telethon.network.connection.connection - WARNING - Server closed the connection: [Errno 104] Connection reset by peer
+2025-09-02 03:40:41,486 - telethon.network.mtprotosender - INFO - Connection closed while receiving data: [Errno 104] Connection reset by peer
+2025-09-02 03:40:41,487 - telethon.network.mtprotosender - INFO - Closing current connection to begin reconnect...
+2025-09-02 03:40:41,487 - telethon.network.mtprotosender - INFO - Connecting to 91.108.56.150:443/TcpFull...
+2025-09-02 03:40:41,487 - telethon.network.connection.connection - INFO - <class 'ConnectionResetError'> during disconnect: [Errno 104] Connection reset by peer
+2025-09-02 03:40:41,548 - telethon.network.mtprotosender - INFO - Connection to 91.108.56.150:443/TcpFull complete!
+2025-09-02 04:29:50,527 - aiogram.dispatcher - ERROR - Failed to fetch updates - TelegramNetworkError: HTTP Client says - ClientOSError: [Errno 104] Connection reset by peer
+2025-09-02 04:29:50,528 - aiogram.dispatcher - WARNING - Sleep for 1.000000 seconds and try again... (tryings = 0, bot id = 8170403768)
+2025-09-02 04:30:02,079 - aiogram.dispatcher - INFO - Connection established (tryings = 1, bot id = 8170403768)
+2025-09-02 04:32:22,343 - telegram_bot - INFO - 👤 USER INTERACTION: User 7201681054 (@cricplusofficials) sent /start command
+2025-09-02 04:32:22,991 - telegram_bot - INFO - 🤖 BOT RESPONSE: Sending welcome message to user 7201681054
+2025-09-02 04:32:23,740 - aiogram.event - INFO - Update id=855442430 is handled. Duration 1397 ms by bot id=8170403768
+2025-09-02 04:32:28,209 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 7201681054 (@cricplusofficials) clicked 'account_manager'
+2025-09-02 04:32:28,209 - inline_handler - INFO - 🏠 MAIN MENU: Routing 'account_manager' to main menu handler
+2025-09-02 04:32:28,211 - inline_handler - INFO - 📋 MAIN MENU ACTION: User 7201681054 (@cricplusofficials) selected 'account_manager'
+2025-09-02 04:32:28,211 - inline_handler - INFO - 🎯 FEATURE ACCESS: User 7201681054 accessing 'account_manager' feature
+2025-09-02 04:32:28,212 - inline_handler - INFO - 🎯 FEATURE ROUTING: Loading 'Account Manager' for user 7201681054
+2025-09-02 04:32:28,213 - inline_handler - INFO - 🤖 FEATURE RESPONSE: Sending 'Account Manager' menu to user 7201681054
+2025-09-02 04:32:28,945 - aiogram.event - INFO - Update id=855442431 is handled. Duration 737 ms by bot id=8170403768
+2025-09-02 04:32:30,374 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 7201681054 (@cricplusofficials) clicked 'am_list_accounts'
+2025-09-02 04:32:30,374 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_list_accounts'
+2025-09-02 04:32:32,445 - aiogram.event - INFO - Update id=855442432 is handled. Duration 2071 ms by bot id=8170403768
+2025-09-02 04:32:36,434 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 7201681054 (@cricplusofficials) clicked 'am_add_account'
+2025-09-02 04:32:36,434 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_add_account'
+2025-09-02 04:32:38,052 - aiogram.event - INFO - Update id=855442433 is handled. Duration 1618 ms by bot id=8170403768
+2025-09-02 04:32:40,775 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 7201681054 (@cricplusofficials) clicked 'am_use_default_api'
+2025-09-02 04:32:40,775 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_use_default_api'
+2025-09-02 04:32:42,070 - aiogram.event - INFO - Update id=855442434 is handled. Duration 1296 ms by bot id=8170403768
+2025-09-02 04:34:49,294 - core.database.coordinator - ERROR - Database connection error: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:34:49,517 - core.database.coordinator - ERROR - Query execution failed: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:34:49,517 - features.account_management.handler - ERROR - Error handling phone input: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:34:49,896 - aiogram.event - INFO - Update id=855442435 is handled. Duration 1720 ms by bot id=8170403768
+2025-09-02 04:34:58,335 - aiogram.event - INFO - Update id=855442436 is handled. Duration 369 ms by bot id=8170403768
+2025-09-02 04:35:06,316 - core.database.coordinator - ERROR - Database connection error: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:35:06,540 - core.database.coordinator - ERROR - Query execution failed: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:35:06,540 - features.account_management.handler - ERROR - Error handling phone input: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:35:06,913 - aiogram.event - INFO - Update id=855442437 is handled. Duration 1489 ms by bot id=8170403768
+2025-09-02 04:35:07,765 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 7201681054 (@cricplusofficials) clicked 'am_add_account'
+2025-09-02 04:35:07,765 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_add_account'
+2025-09-02 04:35:09,402 - aiogram.event - INFO - Update id=855442438 is handled. Duration 1637 ms by bot id=8170403768
+2025-09-02 04:37:41,607 - telethon.client.updates - INFO - Got difference for account updates
+2025-09-02 04:38:37,036 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 6005795326 (@Damn_itz_ravan) clicked 'am_add_account'
+2025-09-02 04:38:37,036 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_add_account'
+2025-09-02 04:38:39,108 - aiogram.event - INFO - Update id=855442439 is handled. Duration 2073 ms by bot id=8170403768
+2025-09-02 04:38:45,427 - inline_handler - INFO - 🔘 BUTTON PRESSED: User 6005795326 (@Damn_itz_ravan) clicked 'am_use_default_api'
+2025-09-02 04:38:45,427 - inline_handler - INFO - 🔄 ROUTING: Account Manager callback 'am_use_default_api'
+2025-09-02 04:38:46,733 - aiogram.event - INFO - Update id=855442440 is handled. Duration 1306 ms by bot id=8170403768
+2025-09-02 04:38:54,286 - core.database.coordinator - ERROR - Database connection error: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:38:54,509 - core.database.coordinator - ERROR - Query execution failed: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:38:54,510 - features.account_management.handler - ERROR - Error handling phone input: column "unique_id" of relation "telegram_accounts" does not exist
+2025-09-02 04:38:54,882 - aiogram.event - INFO - Update id=855442441 is handled. Duration 1489 ms by bot id=8170403768
+2025-09-02 04:39:18,272 - aiogram.dispatcher - WARNING - Received SIGTERM signal
+2025-09-02 04:39:18,273 - aiogram.dispatcher - INFO - Polling stopped for bot @ravand3_bot id=8170403768 - '𓊈𒆜𝙋𝙞𝙧𝙖𝙩𝙚𒆜𓊉'
+2025-09-02 04:39:18,273 - aiogram.dispatcher - INFO - Polling stopped
+2025-09-02 04:39:18,750 - core.database.coordinator - INFO - ✅ Database connection pool closed
+2025-09-02 04:39:18,751 - core.database.unified_database - INFO - ✅ Database manager closed
+2025-09-02 04:39:18,751 - telegram_bot - INFO - ⏹️ Shutting down bot...
+2025-09-02 04:39:18,751 - features.emoji_reactions.handler - INFO - ⏹️ Shutting down emoji reactions handler...
+2025-09-02 04:39:18,751 - features.emoji_reactions.handler - INFO - ✅ Emoji reactions handler shut down
+2025-09-02 04:39:18,751 - features.analytics.handler - INFO - ✅ Analytics handler shut down
+2025-09-02 04:39:18,751 - features.system_health.handler - INFO - ⏹️ Shutting down system health handler...
+2025-09-02 04:39:18,752 - features.system_health.handler - INFO - ✅ System health handler shut down
+2025-09-02 04:39:18,752 - features.live_management.handler - INFO - ⏹️ Shutting down live management handler...
+2025-09-02 04:39:18,752 - features.live_management.handler - INFO - ✅ Live management handler shut down
+2025-09-02 04:39:18,752 - telegram_bot - INFO - ✅ Bot shutdown completed
