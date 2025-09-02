@@ -102,7 +102,8 @@ class DatabaseCoordinator:
                     "DROP TABLE IF EXISTS emoji_reactions CASCADE",
                     "DROP TABLE IF EXISTS live_stream_participants CASCADE",
                     "DROP TABLE IF EXISTS view_boost_campaigns CASCADE",
-                    "DROP TABLE IF EXISTS channels CASCADE",
+                    "DROP TABLE IF EXISTS telegram_channels CASCADE",
+                    "DROP TABLE IF EXISTS channels CASCADE", 
                     "DROP TABLE IF EXISTS telegram_accounts CASCADE",
                     "DROP TABLE IF EXISTS users CASCADE"
                 ]
