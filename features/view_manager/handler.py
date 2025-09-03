@@ -88,6 +88,8 @@ class ViewManagerHandler:
                 await self._handle_channel_toggle(callback, state)
             elif callback_data.startswith("vm_config_"):
                 await self._handle_config_channel(callback, state)
+            elif callback_data.startswith("vm_manual_"):
+                await self._handle_manual_channel_selected(callback, state)
             elif callback_data == "vm_start_engine":
                 await self._handle_start_engine(callback, state)
             elif callback_data == "vm_stop_engine":
@@ -410,6 +412,52 @@ Settings have been applied to all enabled channels.
             logger.error(f"Error in manual boost: {e}")
             await callback.answer("❌ Failed to load manual boost", show_alert=True)
     
+    async def _handle_manual_channel_selected(self, callback: CallbackQuery, state: FSMContext):
+        """Handle manual channel selection"""
+        try:
+            if not callback.data:
+                await callback.answer("❌ Invalid callback data", show_alert=True)
+                return
+                
+            # Extract channel ID from callback data
+            channel_id = int(callback.data.split("_")[-1])
+            
+            # Get channel info
+            channel = await self._get_channel_by_id(channel_id)
+            if not channel:
+                await callback.answer("❌ Channel not found", show_alert=True)
+                return
+            
+            # Show manual boost options for this channel
+            text = f"""🚀 <b>Manual Boost - {channel['channel_title']}</b>
+
+Select boost type for this channel:
+
+📋 <b>Channel:</b> {channel['channel_title']}
+📊 <b>Members:</b> {channel.get('member_count', 'Unknown')}
+🔗 <b>Link:</b> @{channel.get('username', 'Private')}
+"""
+            
+            buttons = [
+                [InlineKeyboardButton(text="🎯 Select Specific Post", callback_data=f"mb_select_channel")],
+                [InlineKeyboardButton(text="⚡ Quick Boost Latest", callback_data=f"mb_quick_boost")],
+                [InlineKeyboardButton(text="🔗 Boost by Link", callback_data="mb_by_link")],
+                [InlineKeyboardButton(text="🔙 Back to Channels", callback_data="vm_manual_boost")],
+                [InlineKeyboardButton(text="🏠 Main Menu", callback_data="refresh_main")]
+            ]
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            
+            if callback.message:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer("🚀 Manual boost options loaded")
+            else:
+                await callback.answer("❌ Unable to update message", show_alert=True)
+                
+        except Exception as e:
+            logger.error(f"Error in manual channel selected: {e}")
+            await callback.answer("❌ Failed to load boost options", show_alert=True)
+    
     async def _handle_start_engine(self, callback: CallbackQuery, state: FSMContext):
         """Start the auto boost monitoring engine"""
         try:
@@ -598,6 +646,10 @@ Engine has been stopped successfully.
             logger.error(f"Error performing boost operation: {e}")
     
     # Helper methods
+    async def _get_channel_by_id(self, channel_id: int) -> Optional[Dict[str, Any]]:
+        """Get channel by ID"""
+        return await self.db.get_channel_by_id(channel_id)
+    
     async def _get_user_channels(self, user_id: int) -> List[Dict[str, Any]]:
         """Get user's channels"""
         return await self.db.fetch_all(

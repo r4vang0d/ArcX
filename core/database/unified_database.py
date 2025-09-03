@@ -183,7 +183,7 @@ class DatabaseManager:
         try:
             db_channel_id = await self.execute_query(
                 """
-                INSERT INTO channels (user_id, channel_id, username, title, description, created_at, updated_at)
+                INSERT INTO telegram_channels (user_id, channel_id, username, title, description, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
                 ON CONFLICT (channel_id) 
                 DO UPDATE SET 
@@ -202,24 +202,32 @@ class DatabaseManager:
     
     async def get_user_channels(self, user_id: int, active_only: bool = True) -> List[Dict[str, Any]]:
         """Get user's channels"""
-        query = "SELECT * FROM channels WHERE user_id = $1"
-        if active_only:
-            query += " AND is_active = TRUE"
-        query += " ORDER BY created_at DESC"
-        
-        return await self.fetch_all(query, user_id)
+        try:
+            query = "SELECT * FROM telegram_channels WHERE user_id = $1"
+            if active_only:
+                query += " AND is_active = TRUE"
+            query += " ORDER BY created_at DESC"
+            
+            return await self.fetch_all(query, user_id)
+        except Exception as e:
+            logger.error(f"Failed to get user channels: {e}")
+            return []
     
     async def get_channel_by_id(self, channel_db_id: int) -> Optional[Dict[str, Any]]:
         """Get channel by database ID"""
-        return await self.fetch_one(
-            "SELECT * FROM channels WHERE id = $1",
-            channel_db_id
-        )
+        try:
+            return await self.fetch_one(
+                "SELECT * FROM telegram_channels WHERE id = $1",
+                channel_db_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to get channel by id {channel_db_id}: {e}")
+            return None
     
     async def get_channel_by_channel_id(self, channel_id: int) -> Optional[Dict[str, Any]]:
         """Get channel by Telegram channel ID"""
         return await self.fetch_one(
-            "SELECT * FROM channels WHERE channel_id = $1",
+            "SELECT * FROM telegram_channels WHERE channel_id = $1",
             channel_id
         )
     
@@ -252,7 +260,7 @@ class DatabaseManager:
             updates.append(f"updated_at = NOW()")
             params.append(channel_db_id)
             
-            query = f"UPDATE channels SET {', '.join(updates)} WHERE id = ${param_count}"
+            query = f"UPDATE telegram_channels SET {', '.join(updates)} WHERE id = ${param_count}"
             
             await self.execute_query(query, *params)
             return True
