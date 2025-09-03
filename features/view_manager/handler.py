@@ -70,6 +70,10 @@ class ViewManagerHandler:
     async def handle_callback(self, callback: CallbackQuery, state: FSMContext):
         """Handle view manager callbacks"""
         try:
+            if not callback.data:
+                await callback.answer("❌ Invalid callback data", show_alert=True)
+                return
+                
             callback_data = callback.data
             user_id = callback.from_user.id
             
@@ -89,6 +93,7 @@ class ViewManagerHandler:
             elif callback_data.startswith("vm_config_"):
                 await self._handle_config_channel(callback, state)
             elif callback_data.startswith("vm_manual_"):
+                logger.info(f"🎯 MANUAL CHANNEL: Processing manual channel selection for '{callback_data}'")
                 await self._handle_manual_channel_selected(callback, state)
             elif callback_data == "vm_start_engine":
                 await self._handle_start_engine(callback, state)
@@ -135,12 +140,54 @@ class ViewManagerHandler:
                 [InlineKeyboardButton(text="[🏠 Main Menu]", callback_data="refresh_main")]
             ])
             
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("⚙️ Auto boost menu loaded")
+            if callback.message:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer("⚙️ Auto boost menu loaded")
+            else:
+                await callback.answer("❌ Unable to update message", show_alert=True)
             
         except Exception as e:
             logger.error(f"Error in auto boost menu: {e}")
             await callback.answer("❌ Failed to load auto boost", show_alert=True)
+    
+    async def _handle_boost_settings(self, callback: CallbackQuery, state: FSMContext):
+        """Handle boost settings menu"""
+        try:
+            user_id = callback.from_user.id
+            
+            text = """🎛️ <b>Boost Settings</b>
+
+Configure your auto boost settings:
+
+<b>Current Settings:</b>
+• Default boost count: 100-500 views
+• Delay between boosts: 30-60 minutes
+• Max daily boosts per channel: 10
+
+<b>Available Options:</b>
+• Configure boost amounts
+• Set delay intervals
+• Enable/disable specific channels
+• Custom boost schedules
+            """
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⚙️ Configure Amounts", callback_data="vm_config_amounts")],
+                [InlineKeyboardButton(text="⏰ Set Delays", callback_data="vm_config_delays")],
+                [InlineKeyboardButton(text="📋 Channel Settings", callback_data="vm_select_channels")],
+                [InlineKeyboardButton(text="🔙 Back to Auto Boost", callback_data="vm_auto_boost")],
+                [InlineKeyboardButton(text="🏠 Main Menu", callback_data="refresh_main")]
+            ])
+            
+            if callback.message:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer("🎛️ Boost settings loaded")
+            else:
+                await callback.answer("❌ Unable to update message", show_alert=True)
+                
+        except Exception as e:
+            logger.error(f"Error in boost settings: {e}")
+            await callback.answer("❌ Failed to load boost settings", show_alert=True)
     
     async def _handle_select_channels(self, callback: CallbackQuery, state: FSMContext):
         """Handle channel selection for auto boost"""
@@ -379,14 +426,17 @@ Settings have been applied to all enabled channels.
             # Get user's channels
             channels = await self._get_user_channels(user_id)
             if not channels:
-                await callback.message.edit_text(
-                    "🔥 <b>ArcX | No Channels Available</b>\\n\\n"
-                    "Add channels first in Channel Manager.",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="[📺 Channel Manager]", callback_data="channel_manager")],
-                        [InlineKeyboardButton(text="[🔙 Back]", callback_data="views_manager")]
-                    ])
-                )
+                if callback.message:
+                    await callback.message.edit_text(
+                        "🔥 <b>ArcX | No Channels Available</b>\\n\\n"
+                        "Add channels first in Channel Manager.",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="[📺 Channel Manager]", callback_data="channel_manager")],
+                            [InlineKeyboardButton(text="[🔙 Back]", callback_data="views_manager")]
+                        ])
+                    )
+                else:
+                    await callback.answer("❌ No channels available", show_alert=True)
                 await callback.answer("ℹ️ No channels available")
                 return
             
@@ -405,8 +455,11 @@ Settings have been applied to all enabled channels.
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             
-            await callback.message.edit_text(text, reply_markup=keyboard)
-            await callback.answer("🚀 Select channel for manual boost")
+            if callback.message:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+                await callback.answer("🚀 Select channel for manual boost")
+            else:
+                await callback.answer("❌ Unable to update message", show_alert=True)
             
         except Exception as e:
             logger.error(f"Error in manual boost: {e}")
@@ -415,12 +468,18 @@ Settings have been applied to all enabled channels.
     async def _handle_manual_channel_selected(self, callback: CallbackQuery, state: FSMContext):
         """Handle manual channel selection"""
         try:
+            logger.info(f"🔍 MANUAL CHANNEL DEBUG: Starting manual channel selection handler")
+            
             if not callback.data:
+                logger.error(f"❌ MANUAL CHANNEL ERROR: No callback data provided")
                 await callback.answer("❌ Invalid callback data", show_alert=True)
                 return
                 
+            logger.info(f"📋 MANUAL CHANNEL DEBUG: Callback data received: '{callback.data}'")
+            
             # Extract channel ID from callback data
             channel_id = int(callback.data.split("_")[-1])
+            logger.info(f"🆔 MANUAL CHANNEL DEBUG: Extracted channel ID: {channel_id}")
             
             # Get channel info
             channel = await self._get_channel_by_id(channel_id)
