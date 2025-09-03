@@ -116,6 +116,13 @@ class InlineHandler:
                     await self.handlers["views_manager"].handle_callback(callback, state)
                     return
             
+            # Manual Boost specific callbacks
+            if callback_data.startswith("mb_"):
+                if "views_manager" in self.handlers:
+                    logger.info(f"🔄 ROUTING: Manual Boost callback '{callback_data}'")
+                    await self.handlers["views_manager"].handle_callback(callback, state)
+                    return
+            
             # Handle unknown callbacks
             logger.warning(f"❓ UNKNOWN CALLBACK: '{callback_data}' from user {user_id}")
             await self._handle_unknown_callback(callback)

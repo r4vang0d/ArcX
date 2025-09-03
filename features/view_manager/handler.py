@@ -104,6 +104,15 @@ class ViewManagerHandler:
             elif callback_data.startswith("vm_manual_"):
                 logger.info(f"🎯 MANUAL CHANNEL: Processing manual channel selection for '{callback_data}'")
                 await self._handle_manual_channel_selected(callback, state)
+            elif callback_data == "mb_select_channel":
+                logger.info(f"🎯 MANUAL BOOST: Processing select specific post")
+                await self._handle_select_specific_post(callback, state)
+            elif callback_data == "mb_quick_boost":
+                logger.info(f"🎯 MANUAL BOOST: Processing quick boost latest")
+                await self._handle_quick_boost_latest(callback, state)
+            elif callback_data == "mb_by_link":
+                logger.info(f"🎯 MANUAL BOOST: Processing boost by link")
+                await self._handle_boost_by_link(callback, state)
             elif callback_data == "vm_start_engine":
                 await self._handle_start_engine(callback, state)
             elif callback_data == "vm_stop_engine":
@@ -760,3 +769,136 @@ Engine has been stopped successfully.
             [InlineKeyboardButton(text="[🔄 Try Again]", callback_data="vm_boost_settings")],
             [InlineKeyboardButton(text="[🔙 Back]", callback_data="vm_auto_boost")]
         ])
+    
+    async def _handle_select_specific_post(self, callback: CallbackQuery, state: FSMContext):
+        """Handle select specific post option"""
+        try:
+            if not callback.message:
+                await callback.answer("❌ Message not found", show_alert=True)
+                return
+            
+            text = """🎯 <b>ArcX | Select Specific Post</b>
+
+<b>Select Post Method:</b>
+• Send the post link you want to boost
+• Use the message forwarding feature
+• Enter post ID manually
+
+<b>Instructions:</b>
+1. Copy the link of the specific post
+2. Paste it in the next message
+3. Configure boost settings
+4. Start boosting
+
+<b>Supported Links:</b>
+• t.me/channel/postid
+• Channel posts with message ID
+• Public channel messages"""
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Back to Manual Boost", callback_data="vm_manual_boost")]
+            ])
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+            await callback.answer()
+
+        except Exception as e:
+            logger.error(f"Error in select specific post: {e}")
+            await callback.answer("❌ An error occurred", show_alert=True)
+
+    async def _handle_quick_boost_latest(self, callback: CallbackQuery, state: FSMContext):
+        """Handle quick boost latest post option"""
+        try:
+            if not callback.message:
+                await callback.answer("❌ Message not found", show_alert=True)
+                return
+            
+            user_id = callback.from_user.id
+            
+            # Get user's channels
+            channels = await self._get_user_channels(user_id)
+            
+            if not channels:
+                text = """❌ <b>No Channels Found</b>
+
+You need to add channels first before using quick boost.
+
+<b>Add channels:</b>
+• Go to Channel Management
+• Add your channels
+• Come back to use quick boost"""
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Add Channels", callback_data="channel_management")],
+                    [InlineKeyboardButton(text="🔙 Back", callback_data="vm_manual_boost")]
+                ])
+            else:
+                text = """⚡ <b>ArcX | Quick Boost Latest</b>
+
+<b>Quick Boost Mode:</b>
+• Automatically boosts the latest post
+• No post selection required
+• Fast and efficient
+• Uses all available accounts
+
+<b>Process:</b>
+1. Fetches the most recent post
+2. Applies boost settings
+3. Distributes views across accounts
+4. Monitors progress in real-time
+
+<b>Ready to boost the latest posts?</b>"""
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🚀 Start Quick Boost", callback_data="mb_start_quick_boost")],
+                    [InlineKeyboardButton(text="⚙️ Boost Settings", callback_data="vm_boost_settings")],
+                    [InlineKeyboardButton(text="🔙 Back", callback_data="vm_manual_boost")]
+                ])
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+            await callback.answer()
+
+        except Exception as e:
+            logger.error(f"Error in quick boost latest: {e}")
+            await callback.answer("❌ An error occurred", show_alert=True)
+
+    async def _handle_boost_by_link(self, callback: CallbackQuery, state: FSMContext):
+        """Handle boost by link option"""
+        try:
+            if not callback.message:
+                await callback.answer("❌ Message not found", show_alert=True)
+                return
+            
+            text = """🔗 <b>ArcX | Boost by Link</b>
+
+<b>Boost Any Public Post:</b>
+• Boost posts from any public channel
+• No need to add the channel
+• Direct link boosting
+• Advanced targeting
+
+<b>Supported Link Formats:</b>
+• https://t.me/channel/123
+• https://t.me/username/456
+• t.me/channel/789
+• Channel posts and messages
+
+<b>How to Use:</b>
+1. Copy the post link you want to boost
+2. Send it as your next message
+3. Configure boost amount
+4. Start the boosting process
+
+<b>Send the post link now:</b>"""
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="ℹ️ Link Format Help", callback_data="mb_link_help")],
+                [InlineKeyboardButton(text="🔙 Back to Manual Boost", callback_data="vm_manual_boost")]
+            ])
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+            await callback.answer()
+
+        except Exception as e:
+            logger.error(f"Error in boost by link: {e}")
+            await callback.answer("❌ An error occurred", show_alert=True)
