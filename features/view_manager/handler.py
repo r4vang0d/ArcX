@@ -77,8 +77,17 @@ class ViewManagerHandler:
             callback_data = callback.data
             user_id = callback.from_user.id
             
+            # Debug logging for all view manager callbacks
+            logger.info(f"🔍 VIEW MANAGER DEBUG: Processing callback '{callback_data}' from user {user_id}")
+            
             # Ensure user exists in database
-            await self._ensure_user_exists(callback.from_user)
+            try:
+                await self._ensure_user_exists(callback.from_user)
+                logger.info(f"✅ VIEW MANAGER DEBUG: User {user_id} exists in database")
+            except Exception as e:
+                logger.error(f"❌ VIEW MANAGER ERROR: Failed to ensure user exists: {e}")
+                await callback.answer("❌ Database error", show_alert=True)
+                return
             
             if callback_data == "vm_auto_boost":
                 await self._handle_auto_boost(callback, state)
@@ -100,6 +109,7 @@ class ViewManagerHandler:
             elif callback_data == "vm_stop_engine":
                 await self._handle_stop_engine(callback, state)
             else:
+                logger.warning(f"❓ VIEW MANAGER UNKNOWN: Unhandled callback '{callback_data}' from user {user_id}")
                 await callback.answer("❌ Unknown action", show_alert=True)
                 
         except Exception as e:
