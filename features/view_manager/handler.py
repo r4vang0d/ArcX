@@ -939,12 +939,15 @@ You need to add channels first before using quick boost.
                 ])
             else:
                 # Start the quick boost process
+                import datetime
+                current_time = datetime.datetime.now().strftime("%H:%M:%S")
                 text = f"""🚀 <b>Quick Boost Started!</b>
 
 <b>Boost Configuration:</b>
 • Target: Latest posts from {len(channels)} channels
 • Mode: Quick boost (automatic)
 • Status: Initializing...
+• Started: {current_time}
 
 <b>Process Status:</b>
 ✅ Channels loaded ({len(channels)})
@@ -960,8 +963,15 @@ You need to add channels first before using quick boost.
                     [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="vm_manual_boost")]
                 ])
 
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
-            await callback.answer("🚀 Quick boost initiated!")
+            try:
+                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+                await callback.answer("🚀 Quick boost initiated!")
+            except Exception as edit_error:
+                if "message is not modified" in str(edit_error):
+                    # Message content is the same, just answer the callback
+                    await callback.answer("🚀 Quick boost already started!")
+                else:
+                    raise edit_error
 
         except Exception as e:
             logger.error(f"Error starting quick boost: {e}")
