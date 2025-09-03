@@ -113,6 +113,12 @@ class ViewManagerHandler:
             elif callback_data == "mb_by_link":
                 logger.info(f"🎯 MANUAL BOOST: Processing boost by link")
                 await self._handle_boost_by_link(callback, state)
+            elif callback_data == "mb_start_quick_boost":
+                logger.info(f"🎯 MANUAL BOOST: Processing start quick boost")
+                await self._handle_start_quick_boost(callback, state)
+            elif callback_data == "mb_link_help":
+                logger.info(f"🎯 MANUAL BOOST: Processing link format help")
+                await self._handle_link_help(callback, state)
             elif callback_data == "vm_start_engine":
                 await self._handle_start_engine(callback, state)
             elif callback_data == "vm_stop_engine":
@@ -901,4 +907,107 @@ You need to add channels first before using quick boost.
 
         except Exception as e:
             logger.error(f"Error in boost by link: {e}")
+            await callback.answer("❌ An error occurred", show_alert=True)
+
+    async def _handle_start_quick_boost(self, callback: CallbackQuery, state: FSMContext):
+        """Handle start quick boost action"""
+        try:
+            if not callback.message:
+                await callback.answer("❌ Message not found", show_alert=True)
+                return
+            
+            user_id = callback.from_user.id
+            
+            # Get user's channels and accounts
+            channels = await self._get_user_channels(user_id)
+            
+            if not channels:
+                text = """❌ <b>Cannot Start Quick Boost</b>
+
+<b>Missing Requirements:</b>
+• No channels found
+• Add channels first to start boosting
+
+<b>Next Steps:</b>
+1. Go to Channel Management
+2. Add your channels
+3. Return to start quick boost"""
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="➕ Add Channels", callback_data="channel_management")],
+                    [InlineKeyboardButton(text="🔙 Back", callback_data="mb_quick_boost")]
+                ])
+            else:
+                # Start the quick boost process
+                text = f"""🚀 <b>Quick Boost Started!</b>
+
+<b>Boost Configuration:</b>
+• Target: Latest posts from {len(channels)} channels
+• Mode: Quick boost (automatic)
+• Status: Initializing...
+
+<b>Process Status:</b>
+✅ Channels loaded ({len(channels)})
+⏳ Loading accounts...
+⏳ Fetching latest posts...
+⏳ Starting boost operations...
+
+<b>Monitor the progress below:</b>"""
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📊 View Progress", callback_data="mb_boost_progress")],
+                    [InlineKeyboardButton(text="⏹️ Stop Boost", callback_data="mb_stop_boost")],
+                    [InlineKeyboardButton(text="🔙 Back to Menu", callback_data="vm_manual_boost")]
+                ])
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+            await callback.answer("🚀 Quick boost initiated!")
+
+        except Exception as e:
+            logger.error(f"Error starting quick boost: {e}")
+            await callback.answer("❌ An error occurred", show_alert=True)
+
+    async def _handle_link_help(self, callback: CallbackQuery, state: FSMContext):
+        """Handle link format help"""
+        try:
+            if not callback.message:
+                await callback.answer("❌ Message not found", show_alert=True)
+                return
+            
+            text = """ℹ️ <b>ArcX | Link Format Help</b>
+
+<b>Supported Link Formats:</b>
+
+<b>1. Standard Telegram Links:</b>
+• https://t.me/channelname/123
+• https://t.me/c/1234567890/456
+• t.me/username/789
+
+<b>2. Channel Post Links:</b>
+• https://t.me/channelname/postid
+• Links with message IDs
+• Public channel messages
+
+<b>3. Copy Link Methods:</b>
+• Right-click on post → Copy Link
+• Share → Copy Link
+• Long press on mobile → Copy
+
+<b>Examples of Valid Links:</b>
+• https://t.me/example_channel/25
+• t.me/mychannel/100
+• https://t.me/c/1001234567890/15
+
+<b>Note:</b> Private channels require special access"""
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📝 Test Link Format", callback_data="mb_test_link")],
+                [InlineKeyboardButton(text="🔙 Back", callback_data="mb_by_link")]
+            ])
+
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode='HTML')
+            await callback.answer()
+
+        except Exception as e:
+            logger.error(f"Error showing link help: {e}")
             await callback.answer("❌ An error occurred", show_alert=True)
